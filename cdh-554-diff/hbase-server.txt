@@ -1,0 +1,66 @@
+Index: src/test/java/org/apache/hadoop/hbase/mapreduce/TestSerialization.java
+===================================================================
+--- src/test/java/org/apache/hadoop/hbase/mapreduce/TestSerialization.java	(revision 32)
++++ src/test/java/org/apache/hadoop/hbase/mapreduce/TestSerialization.java	(revision 35)
+@@ -16,7 +16,7 @@
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
+  */
+-package org.apache.hadoop.hbase.mapred;
++package org.apache.hadoop.hbase.mapreduce;
+ 
+ 
+ import com.google.protobuf.InvalidProtocolBufferException;
+Index: src/main/java/org/apache/hadoop/hbase/ipc/RpcServer.java
+===================================================================
+--- src/main/java/org/apache/hadoop/hbase/ipc/RpcServer.java	(revision 32)
++++ src/main/java/org/apache/hadoop/hbase/ipc/RpcServer.java	(revision 35)
+@@ -771,22 +771,32 @@
+           throw ioe;
+         }
+ 
+-        Reader reader = getReader();
+-        try {
+-          reader.startAdd();
+-          SelectionKey readKey = reader.registerChannel(channel);
+-          c = getConnection(channel, System.currentTimeMillis());
+-          readKey.attach(c);
+-          synchronized (connectionList) {
+-            connectionList.add(numConnections, c);
+-            numConnections++;
+-          }
+-          if (LOG.isDebugEnabled())
+-            LOG.debug(getName() + ": connection from " + c.toString() +
+-                "; # active connections: " + numConnections);
+-        } finally {
+-          reader.finishAdd();
+-        }
++        final SocketChannel channelf = channel;
++        final Reader reader = getReader();
++        Thread d = new Thread() {
++        	public void run(){
++        		reader.startAdd();
++        		SelectionKey readKey;
++        		try {
++        			readKey = reader.registerChannel(channelf);
++        			Connection c = getConnection(channelf, System.currentTimeMillis());
++        			readKey.attach(c);
++        			synchronized (connectionList) {
++        				connectionList.add(numConnections, c);
++        				numConnections++;
++        			}
++        			if (LOG.isDebugEnabled())
++        				LOG.debug(getName() + ": connection from " + c.toString() +
++        						"; # active connections: " + numConnections+" "+this.getId());
++        		} catch (IOException e) {
++        			// TODO Auto-generated catch block
++        			e.printStackTrace();
++        		} finally {
++        			reader.finishAdd();
++        		}
++        	}
++        };
++        d.start();
+       }
+     }
+ 

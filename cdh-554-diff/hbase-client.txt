@@ -1,0 +1,104 @@
+Index: org/apache/hadoop/hbase/ipc/RpcClientImpl.java
+===================================================================
+--- org/apache/hadoop/hbase/ipc/RpcClientImpl.java	(revision 32)
++++ org/apache/hadoop/hbase/ipc/RpcClientImpl.java	(revision 35)
+@@ -110,7 +110,7 @@
+   protected final FailedServers failedServers;
+ 
+   protected final SocketFactory socketFactory;           // how to create sockets
+-
++  protected int macc;   
+   protected final static Map<AuthenticationProtos.TokenIdentifier.Kind,
+       TokenSelector<? extends TokenIdentifier>> tokenHandlers =
+       new HashMap<AuthenticationProtos.TokenIdentifier.Kind,
+@@ -1079,6 +1079,10 @@
+     this.socketFactory = factory;
+     this.connections = new PoolMap<ConnectionId, Connection>(getPoolType(conf), getPoolSize(conf));
+     this.failedServers = new FailedServers(conf);
++    this.macc = conf.getInt("pezy.hbase.ipc.connection", 1);
++    if(this.macc<1){
++    	this.macc = 1;
++    }
+   }
+ 
+   /**
+@@ -1289,9 +1293,10 @@
+                                      final Codec codec, final CompressionCodec compressor)
+   throws IOException {
+     if (!running.get()) throw new StoppedRpcClientException();
+-    Connection connection;
++    Connection connection;   
+     ConnectionId remoteId =
+-      new ConnectionId(ticket, call.md.getService().getName(), addr);
++ //     new ConnectionId(ticket, call.md.getService().getName(), addr);
++      new ConnectionId(ticket, call.md.getService().getName(), addr,this.macc);
+     synchronized (connections) {
+       connection = connections.get(remoteId);
+       if (connection == null) {
+Index: org/apache/hadoop/hbase/ipc/ConnectionId.java
+===================================================================
+--- org/apache/hadoop/hbase/ipc/ConnectionId.java	(revision 32)
++++ org/apache/hadoop/hbase/ipc/ConnectionId.java	(revision 35)
+@@ -19,7 +19,8 @@
+ 
+ import org.apache.hadoop.hbase.classification.InterfaceAudience;
+ import org.apache.hadoop.hbase.security.User;
+-
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
+ import java.net.InetSocketAddress;
+ 
+ /**
+@@ -32,13 +33,26 @@
+   final User ticket;
+   private static final int PRIME = 16777619;
+   final String serviceName;
++  final int flag;
++  public static final Log LOG = LogFactory.getLog(ConnectionId.class);
+ 
+   public ConnectionId(User ticket, String serviceName, InetSocketAddress address) {
+     this.address = address;
+     this.ticket = ticket;
+     this.serviceName = serviceName;
++    this.flag = 1;
+   }
+-
++  public ConnectionId(User ticket, String serviceName, InetSocketAddress address,int maxFlag) {
++	    this.address = address;
++	    this.ticket = ticket;
++	    this.serviceName = serviceName;
++	   if(maxFlag<1)
++		   maxFlag=1;
++	   this.flag = (int)(Thread.currentThread().getId() % (long)maxFlag);
++	   if (LOG.isDebugEnabled()) {
++		   LOG.debug("pezy connection construction "+flag+" "+maxFlag+" "+Thread.currentThread().getId());
++	   }
++  }
+   public String getServiceName() {
+     return this.serviceName;
+   }
+@@ -60,10 +74,14 @@
+   public boolean equals(Object obj) {
+    if (obj instanceof ConnectionId) {
+      ConnectionId id = (ConnectionId) obj;
++     if (LOG.isDebugEnabled()) {
++		   LOG.debug("pezy connection construction "+this.flag+" "+id.flag);
++	   }
+      return address.equals(id.address) &&
+             ((ticket != null && ticket.equals(id.ticket)) ||
+              (ticket == id.ticket)) &&
+-             this.serviceName == id.serviceName;
++             this.serviceName == id.serviceName &&
++             this.flag == id.flag;
+    }
+    return false;
+   }
+@@ -72,7 +90,7 @@
+   public int hashCode() {
+     int hashcode = (address.hashCode() +
+       PRIME * (PRIME * this.serviceName.hashCode() ^
+-      (ticket == null ? 0 : ticket.hashCode())));
++      (ticket == null ? 0 : ticket.hashCode()))) ^ this.flag;;
+     return hashcode;
+   }
+ }

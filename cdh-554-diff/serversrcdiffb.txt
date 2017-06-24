@@ -1,0 +1,923 @@
+diff -r -b -B ./hbasenew/serversrc/src/org/apache/hadoop/hbase/ipc/RpcServer.java ./hbaseold/serversrc/src/org/apache/hadoop/hbase/ipc/RpcServer.java
+574c574
+<             if(totalRequestSize + callQueueSize.get() > maxQueueSize)
+---
+>             if(totalRequestSize + callQueueSize.get() > (long)maxQueueSize)
+1356a1357
+> _L2:
+1358,1359c1359,1361
+<             while((channel = server.accept()) != null) 
+<             {
+---
+>             Reader reader;
+>             if((channel = server.accept()) == null)
+>                 break; /* Loop/switch isn't completed */
+1363d1364
+<                     channel.socket().setSoTimeout(0x493e0);
+1372,1377c1373
+<                 final SocketChannel channelf = channel;
+<                 final Reader reader = getReader();
+<                 Thread d = new Thread() {
+< 
+<                     public void run()
+<                     {
+---
+>             reader = getReader();
+1379,1380c1375,1376
+<                         SelectionKey readKey = reader.registerChannel(channelf);
+<                         Connection c = getConnection(channelf, System.currentTimeMillis());
+---
+>             SelectionKey readKey = reader.registerChannel(channel);
+>             Connection c = getConnection(channel, System.currentTimeMillis());
+1390,1395c1386
+<                         break MISSING_BLOCK_LABEL_213;
+<                         IOException e;
+<                         e;
+<                         e.printStackTrace();
+<                         reader.finishAdd();
+<                         break MISSING_BLOCK_LABEL_213;
+---
+>             if(true) goto _L2; else goto _L1
+1400,1417c1391
+<                     }
+< 
+<                     final Reader val$reader;
+<                     final SocketChannel val$channelf;
+<                     final Listener this$1;
+< 
+<                 
+<                 {
+<                     this$1 = Listener.this;
+<                     reader = reader1;
+<                     channelf = socketchannel;
+<                     super();
+<                 }
+<                 };
+<                 d.setDaemon(true);
+<                 d.setPriority(10);
+<                 d.start();
+<             }
+---
+> _L1:
+1518d1491
+<             setPriority(10);
+1767,1768c1740,1741
+<         maxQueueSize = this.conf.getLong("ipc.server.max.callqueue.size", 0x3c0000000L);
+<         readThreads = conf.getInt("ipc.server.read.threadpool.size", 50);
+---
+>         maxQueueSize = this.conf.getInt("ipc.server.max.callqueue.size", 0x40000000);
+>         readThreads = conf.getInt("ipc.server.read.threadpool.size", 10);
+1813,1820d1785
+<         try
+<         {
+<             throw new IOException("");
+<         }
+<         catch(IOException e)
+<         {
+<             e.printStackTrace();
+<         }
+2161c2126
+<     private static final long DEFAULT_MAX_CALLQUEUE_SIZE = 0x3c0000000L;
+---
+>     private static final int DEFAULT_MAX_CALLQUEUE_SIZE = 0x40000000;
+2183c2148
+<     private long maxQueueSize;
+---
+>     private int maxQueueSize;
+diff -r -b -B ./hbasenew/serversrc/src/org/apache/hadoop/hbase/regionserver/compactions/CompactionRequest.java ./hbaseold/serversrc/src/org/apache/hadoop/hbase/regionserver/compactions/CompactionRequest.java
+11d10
+< import java.util.concurrent.ConcurrentHashMap;
+16,17d14
+< import org.apache.hadoop.fs.Path;
+< import org.apache.hadoop.hbase.regionserver.HRegionServer;
+38,76d34
+<     private void checkFiles(CompactionRequest request)
+<     {
+<         try
+<         {
+<             List toRemove = new ArrayList();
+<             for(Iterator i$ = request.getFiles().iterator(); i$.hasNext();)
+<             {
+<                 StoreFile sf = (StoreFile)i$.next();
+<                 Iterator i$ = HRegionServer.badStoreFilePath.keySet().iterator();
+<                 while(i$.hasNext()) 
+<                 {
+<                     String s = (String)i$.next();
+<                     sf.getPath();
+<                     if(Path.getPathWithoutSchemeAndAuthority(sf.getPath()).toString().trim().equals(s.trim()))
+<                     {
+<                         try
+<                         {
+<                             LOG.error((new StringBuilder()).append("remove bad store file:").append(sf).toString());
+<                         }
+<                         catch(Exception e)
+<                         {
+<                             LOG.error("", e);
+<                         }
+<                         toRemove.add(sf);
+<                     }
+<                 }
+<             }
+< 
+<             StoreFile sf;
+<             for(Iterator i$ = toRemove.iterator(); i$.hasNext(); request.getFiles().remove(sf))
+<                 sf = (StoreFile)i$.next();
+< 
+<         }
+<         catch(Throwable e)
+<         {
+<             LOG.error("", e);
+<         }
+<     }
+< 
+82d39
+<         checkFiles(this);
+127,166d83
+<     public static Collection getFilesAfterCheck(Collection old)
+<     {
+<         try
+<         {
+<             List toRemove = new ArrayList();
+<             for(Iterator i$ = old.iterator(); i$.hasNext();)
+<             {
+<                 StoreFile sf = (StoreFile)i$.next();
+<                 Iterator i$ = HRegionServer.badStoreFilePath.keySet().iterator();
+<                 while(i$.hasNext()) 
+<                 {
+<                     String s = (String)i$.next();
+<                     sf.getPath();
+<                     if(Path.getPathWithoutSchemeAndAuthority(sf.getPath()).toString().trim().equals(s.trim()))
+<                     {
+<                         try
+<                         {
+<                             LOG.error((new StringBuilder()).append("remove bad store file:").append(sf).toString());
+<                         }
+<                         catch(Exception e)
+<                         {
+<                             LOG.error("", e);
+<                         }
+<                         toRemove.add(sf);
+<                     }
+<                 }
+<             }
+< 
+<             StoreFile sf;
+<             for(Iterator i$ = toRemove.iterator(); i$.hasNext(); old.remove(sf))
+<                 sf = (StoreFile)i$.next();
+< 
+<         }
+<         catch(Throwable e)
+<         {
+<             LOG.error("", e);
+<         }
+<         return old;
+<     }
+< 
+diff -r -b -B ./hbasenew/serversrc/src/org/apache/hadoop/hbase/regionserver/compactions/DefaultCompactor.java ./hbaseold/serversrc/src/org/apache/hadoop/hbase/regionserver/compactions/DefaultCompactor.java
+11,12d10
+< import org.apache.commons.logging.Log;
+< import org.apache.commons.logging.LogFactory;
+107,109d104
+< 
+<     public static final Log LOG = LogFactory.getLog(org/apache/hadoop/hbase/regionserver/compactions/DefaultCompactor);
+< 
+diff -r -b -B ./hbasenew/serversrc/src/org/apache/hadoop/hbase/regionserver/handler/ParallelSeekHandler.java ./hbaseold/serversrc/src/org/apache/hadoop/hbase/regionserver/handler/ParallelSeekHandler.java
+7a8
+> import java.io.IOException;
+30,39d30
+<     public KeyValueScanner getScanner()
+<     {
+<         return scanner;
+<     }
+< 
+<     public void setScanner(KeyValueScanner scanner)
+<     {
+<         this.scanner = scanner;
+<     }
+< 
+45c36
+<         Throwable e;
+---
+>         IOException e;
+diff -r -b -B ./hbasenew/serversrc/src/org/apache/hadoop/hbase/regionserver/HRegionServer.java ./hbaseold/serversrc/src/org/apache/hadoop/hbase/regionserver/HRegionServer.java
+2221c2221
+<         static class _cls4
+---
+>         static class _cls3
+2269c2269
+<         switch(_cls4..SwitchMap.org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto.MutationType[type.ordinal()])
+---
+>         switch(_cls3..SwitchMap.org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto.MutationType[type.ordinal()])
+2779c2779
+<                     switch(_cls4..SwitchMap.org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto.MutationType[type.ordinal()])
+---
+>                     switch(_cls3..SwitchMap.org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto.MutationType[type.ordinal()])
+3447c3447
+<                 switch(_cls4..SwitchMap.org.apache.hadoop.hbase.HConstants.OperationStatusCode[codes[i].getOperationStatusCode().ordinal()])
+---
+>                 switch(_cls3..SwitchMap.org.apache.hadoop.hbase.HConstants.OperationStatusCode[codes[i].getOperationStatusCode().ordinal()])
+3559c3559
+<             switch(_cls4..SwitchMap.org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto.MutationType[type.ordinal()])
+---
+>             switch(_cls3..SwitchMap.org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto.MutationType[type.ordinal()])
+3720d3719
+<     public static ConcurrentHashMap badStoreFilePath = new ConcurrentHashMap();
+3803,3825d3801
+<     static 
+<     {
+<         Thread logBadFile = new Thread() {
+< 
+<             public void run()
+<             {
+<                 do
+<                     try
+<                     {
+<                         sleep(60000L);
+<                         HRegionServer.LOG.error((new StringBuilder()).append("bad hfiles are:").append(HRegionServer.badStoreFilePath).toString());
+<                     }
+<                     catch(Throwable e)
+<                     {
+<                         HRegionServer.LOG.error("", e);
+<                     }
+<                 while(true);
+<             }
+< 
+<         };
+<         logBadFile.setDaemon(true);
+<         logBadFile.start();
+<     }
+diff -r -b -B ./hbasenew/serversrc/src/org/apache/hadoop/hbase/regionserver/HStore.java ./hbaseold/serversrc/src/org/apache/hadoop/hbase/regionserver/HStore.java
+890,891d889
+<         cr;
+<         filesToCompact = CompactionRequest.getFilesAfterCheck(filesToCompact);
+897c895
+<         break MISSING_BLOCK_LABEL_355;
+---
+>         break MISSING_BLOCK_LABEL_348;
+1271d1268
+<             compactedFiles = CompactionRequest.getFilesAfterCheck(compactedFiles);
+diff -r -b -B ./hbasenew/serversrc/src/org/apache/hadoop/hbase/regionserver/MemStoreFlusher.java ./hbaseold/serversrc/src/org/apache/hadoop/hbase/regionserver/MemStoreFlusher.java
+528c528
+<                         blockSignal.wait(1000L);
+---
+>                         blockSignal.wait(5000L);
+diff -r -b -B ./hbasenew/serversrc/src/org/apache/hadoop/hbase/regionserver/StoreFileScanner.java ./hbaseold/serversrc/src/org/apache/hadoop/hbase/regionserver/StoreFileScanner.java
+10d9
+< import java.util.concurrent.ConcurrentHashMap;
+15d13
+< import org.apache.hadoop.fs.Path;
+18d15
+< import org.apache.hadoop.hbase.io.hfile.HFile;
+22,23c19,20
+< //            StoreFile, HStore, KeyValueScanner, HRegionServer, 
+< //            BloomType, ScanQueryMatcher
+---
+> //            StoreFile, HStore, KeyValueScanner, BloomType, 
+> //            ScanQueryMatcher
+42,46d38
+<     public StoreFile.Reader getReader()
+<     {
+<         return reader;
+<     }
+< 
+88,91c80
+<         KeyValue retKey = null;
+<         try
+<         {
+<             retKey = cur;
+---
+>         KeyValue retKey = cur;
+106,122d94
+<         }
+<         catch(Throwable e)
+<         {
+<             try
+<             {
+<                 StoreFileScanner scanner = this;
+<                 Path p = scanner.getReader().getHFileReader().getPath();
+<                 HRegionServer.badStoreFilePath.put(p.getPathWithoutSchemeAndAuthority(p).toString(), p.toString());
+<             }
+<             catch(Throwable e2)
+<             {
+<                 LOG.error("", e2);
+<             }
+<             LOG.error("", e);
+<             cur = null;
+<             return null;
+<         }
+diff -r -b -B ./hbasenew/serversrc/src/org/apache/hadoop/hbase/regionserver/StoreScanner.java ./hbaseold/serversrc/src/org/apache/hadoop/hbase/regionserver/StoreScanner.java
+11d10
+< import java.util.concurrent.ConcurrentHashMap;
+18d16
+< import org.apache.hadoop.fs.Path;
+24d21
+< import org.apache.hadoop.hbase.io.hfile.HFile;
+31c28
+< //            StoreFileScanner, KeyValueHeap, InternalScan, InternalScanner, 
+---
+> //            KeyValueHeap, InternalScan, StoreFileScanner, InternalScanner, 
+33c30
+< //            ScanType, HRegion, HRegionServer, StoreFile
+---
+> //            ScanType, HRegion
+190d186
+<         List toRemove = new ArrayList();
+193,221c189,192
+<             Iterator i$ = scanners.iterator();
+<             do
+<             {
+<                 if(!i$.hasNext())
+<                     break;
+<                 KeyValueScanner scanner = (KeyValueScanner)i$.next();
+<                 try
+<                 {
+<                     scanner.requestSeek(seekKey, false, true);
+<                 }
+<                 catch(Exception e)
+<                 {
+<                     LOG.error("", e);
+<                     toRemove.add(scanner);
+<                     try
+<                     {
+<                         if(scanner instanceof StoreFileScanner)
+<                         {
+<                             StoreFileScanner scannerd = (StoreFileScanner)scanner;
+<                             Path p = scannerd.getReader().getHFileReader().getPath();
+<                             HRegionServer.badStoreFilePath.put(p.getPathWithoutSchemeAndAuthority(p).toString(), p.toString());
+<                         }
+<                     }
+<                     catch(Throwable e1)
+<                     {
+<                         LOG.error("", e1);
+<                     }
+<                 }
+<             } while(true);
+---
+>             KeyValueScanner scanner;
+>             for(Iterator i$ = scanners.iterator(); i$.hasNext(); scanner.requestSeek(seekKey, false, true))
+>                 scanner = (KeyValueScanner)i$.next();
+> 
+225,285c196,198
+<             Iterator i$ = scanners.iterator();
+<             do
+<             {
+<                 if(!i$.hasNext())
+<                     break;
+<                 KeyValueScanner scanner = (KeyValueScanner)i$.next();
+<                 try
+<                 {
+<                     scanner.seek(seekKey);
+<                 }
+<                 catch(Exception e)
+<                 {
+<                     LOG.error("", e);
+<                     toRemove.add(scanner);
+<                     try
+<                     {
+<                         if(scanner instanceof StoreFileScanner)
+<                         {
+<                             StoreFileScanner scannerd = (StoreFileScanner)scanner;
+<                             Path p = scannerd.getReader().getHFileReader().getPath();
+<                             HRegionServer.badStoreFilePath.put(p.getPathWithoutSchemeAndAuthority(p).toString(), p.toString());
+<                         }
+<                     }
+<                     catch(Throwable e1)
+<                     {
+<                         LOG.error("", e1);
+<                     }
+<                 }
+<             } while(true);
+<         } else
+<         {
+<             try
+<             {
+<                 parallelSeek(scanners, seekKey, toRemove);
+<             }
+<             catch(Throwable e)
+<             {
+<                 LOG.error("", e);
+<             }
+<         }
+<         if(toRemove.size() != 0)
+<             try
+<             {
+<                 KeyValueScanner s;
+<                 for(Iterator i$ = toRemove.iterator(); i$.hasNext(); scanners.remove(s))
+<                     s = (KeyValueScanner)i$.next();
+< 
+<             }
+<             catch(Exception e)
+<             {
+<                 LOG.error("", e);
+<             }
+<         break MISSING_BLOCK_LABEL_477;
+<         Exception exception;
+<         exception;
+<         if(toRemove.size() != 0)
+<             try
+<             {
+<                 KeyValueScanner s;
+<                 for(Iterator i$ = toRemove.iterator(); i$.hasNext(); scanners.remove(s))
+<                     s = (KeyValueScanner)i$.next();
+---
+>             KeyValueScanner scanner;
+>             for(Iterator i$ = scanners.iterator(); i$.hasNext(); scanner.seek(seekKey))
+>                 scanner = (KeyValueScanner)i$.next();
+287,288c200
+<             }
+<             catch(Exception e)
+---
+>         } else
+290c202
+<                 LOG.error("", e);
+---
+>             parallelSeek(scanners, seekKey);
+292d203
+<         throw exception;
+711c622
+<     private void parallelSeek(List scanners, KeyValue kv, List toRemove)
+---
+>     private void parallelSeek(List scanners, KeyValue kv)
+719,720c630
+<         Iterator i$;
+<         for(i$ = scanners.iterator(); i$.hasNext();)
+---
+>         for(Iterator i$ = scanners.iterator(); i$.hasNext();)
+743,744c653
+<         ie = handlers.iterator();
+<         do
+---
+>         for(Iterator i$ = handlers.iterator(); i$.hasNext();)
+746,748c655
+<             if(!ie.hasNext())
+<                 break;
+<             ParallelSeekHandler handler = (ParallelSeekHandler)ie.next();
+---
+>             ParallelSeekHandler handler = (ParallelSeekHandler)i$.next();
+750,758c657
+<             {
+<                 LOG.error("", new IOException(handler.getErr()));
+<                 try
+<                 {
+<                     if(handler.getScanner() instanceof StoreFileScanner)
+<                     {
+<                         StoreFileScanner scanner = (StoreFileScanner)handler.getScanner();
+<                         Path p = scanner.getReader().getHFileReader().getPath();
+<                         HRegionServer.badStoreFilePath.put(p.getPathWithoutSchemeAndAuthority(p).toString(), p.toString());
+---
+>                 throw new IOException(handler.getErr());
+760,767c659
+<                 }
+<                 catch(Throwable e)
+<                 {
+<                     LOG.error("", e);
+<                 }
+<                 toRemove.add(handler.getScanner());
+<             }
+<         } while(true);
+---
+> 
+diff -r -b -B ./hbasenew/serversrc/src/org/apache/hadoop/hbase/regionserver/wal/ProtobufLogWriter.java ./hbaseold/serversrc/src/org/apache/hadoop/hbase/regionserver/wal/ProtobufLogWriter.java
+30d29
+<         shouldSync = true;
+49d47
+<         shouldSync = conf.getBoolean("pezy.log.sync", true);
+141d138
+<             if(shouldSync)
+176d172
+<     boolean shouldSync;
+diff -r -b -B ./hbasenew/serversrc/src/org/apache/hadoop/hbase/tmpl/master/MasterStatusTmplImpl.java ./hbaseold/serversrc/src/org/apache/hadoop/hbase/tmpl/master/MasterStatusTmplImpl.java
+70a71,72
+>         if(!p_implData.getFormat__IsNotDefault())
+>             p_implData.setFormat("html");
+72a75,76
+>         if(!p_implData.getFilter__IsNotDefault())
+>             p_implData.setFilter("general");
+75,76c79,80
+<         if(!p_implData.getCatalogJanitorEnabled__IsNotDefault())
+<             p_implData.setCatalogJanitorEnabled(true);
+---
+>         if(!p_implData.getDeadServers__IsNotDefault())
+>             p_implData.setDeadServers(null);
+83,88c87,88
+<         if(!p_implData.getDeadServers__IsNotDefault())
+<             p_implData.setDeadServers(null);
+<         if(!p_implData.getFilter__IsNotDefault())
+<             p_implData.setFilter("general");
+<         if(!p_implData.getFormat__IsNotDefault())
+<             p_implData.setFormat("html");
+---
+>         if(!p_implData.getCatalogJanitorEnabled__IsNotDefault())
+>             p_implData.setCatalogJanitorEnabled(true);
+96a97
+>         format = p_implData.getFormat();
+97a99
+>         filter = p_implData.getFilter();
+99c101
+<         catalogJanitorEnabled = p_implData.getCatalogJanitorEnabled();
+---
+>         deadServers = p_implData.getDeadServers();
+103,105c105
+<         deadServers = p_implData.getDeadServers();
+<         filter = p_implData.getFilter();
+<         format = p_implData.getFormat();
+---
+>         catalogJanitorEnabled = p_implData.getCatalogJanitorEnabled();
+114,117c114,117
+<             TaskMonitorTmpl __jamon__var_4 = new TaskMonitorTmpl(getTemplateManager());
+<             __jamon__var_4.setFilter(filter);
+<             __jamon__var_4.setFormat("json");
+<             __jamon__var_4.renderNoFlush(jamonWriter);
+---
+>             TaskMonitorTmpl __jamon__var_14 = new TaskMonitorTmpl(getTemplateManager());
+>             __jamon__var_14.setFilter(filter);
+>             __jamon__var_14.setFormat("json");
+>             __jamon__var_14.renderNoFlush(jamonWriter);
+145,147c145,147
+<             RegionServerListTmpl __jamon__var_5 = new RegionServerListTmpl(getTemplateManager());
+<             __jamon__var_5.setServers(servers);
+<             __jamon__var_5.renderNoFlush(jamonWriter, master);
+---
+>             RegionServerListTmpl __jamon__var_15 = new RegionServerListTmpl(getTemplateManager());
+>             __jamon__var_15.setServers(servers);
+>             __jamon__var_15.renderNoFlush(jamonWriter, master);
+156,157c156,157
+<             BackupMasterStatusTmpl __jamon__var_6 = new BackupMasterStatusTmpl(getTemplateManager());
+<             __jamon__var_6.renderNoFlush(jamonWriter, master);
+---
+>             BackupMasterStatusTmpl __jamon__var_16 = new BackupMasterStatusTmpl(getTemplateManager());
+>             __jamon__var_16.renderNoFlush(jamonWriter, master);
+175,176c175,176
+<             AssignmentManagerStatusTmpl __jamon__var_7 = new AssignmentManagerStatusTmpl(getTemplateManager());
+<             __jamon__var_7.renderNoFlush(jamonWriter, master.getAssignmentManager());
+---
+>             AssignmentManagerStatusTmpl __jamon__var_17 = new AssignmentManagerStatusTmpl(getTemplateManager());
+>             __jamon__var_17.renderNoFlush(jamonWriter, master.getAssignmentManager());
+181,182c181,182
+<             BackupMasterStatusTmpl __jamon__var_8 = new BackupMasterStatusTmpl(getTemplateManager());
+<             __jamon__var_8.renderNoFlush(jamonWriter, master);
+---
+>             BackupMasterStatusTmpl __jamon__var_18 = new BackupMasterStatusTmpl(getTemplateManager());
+>             __jamon__var_18.renderNoFlush(jamonWriter, master);
+186,188c186,188
+<         TaskMonitorTmpl __jamon__var_9 = new TaskMonitorTmpl(getTemplateManager());
+<         __jamon__var_9.setFilter(filter);
+<         __jamon__var_9.renderNoFlush(jamonWriter);
+---
+>         TaskMonitorTmpl __jamon__var_19 = new TaskMonitorTmpl(getTemplateManager());
+>         __jamon__var_19.setFilter(filter);
+>         __jamon__var_19.renderNoFlush(jamonWriter);
+375a376
+>     private final String format;
+376a378
+>     private final String filter;
+378c380
+<     private final boolean catalogJanitorEnabled;
+---
+>     private final Set deadServers;
+382,384c384
+<     private final Set deadServers;
+<     private final String filter;
+<     private final String format;
+---
+>     private final boolean catalogJanitorEnabled;
+diff -r -b -B ./hbasenew/serversrc/src/org/apache/hadoop/hbase/tmpl/master/MasterStatusTmpl.java ./hbaseold/serversrc/src/org/apache/hadoop/hbase/tmpl/master/MasterStatusTmpl.java
+44a45,60
+>         public void setFormat(String format)
+>         {
+>             m_format = format;
+>             m_format__IsNotDefault = true;
+>         }
+> 
+>         public String getFormat()
+>         {
+>             return m_format;
+>         }
+> 
+>         public boolean getFormat__IsNotDefault()
+>         {
+>             return m_format__IsNotDefault;
+>         }
+> 
+60a77,92
+>         public void setFilter(String filter)
+>         {
+>             m_filter = filter;
+>             m_filter__IsNotDefault = true;
+>         }
+> 
+>         public String getFilter()
+>         {
+>             return m_filter;
+>         }
+> 
+>         public boolean getFilter__IsNotDefault()
+>         {
+>             return m_filter__IsNotDefault;
+>         }
+> 
+77c109
+<         public void setCatalogJanitorEnabled(boolean catalogJanitorEnabled)
+---
+>         public void setDeadServers(Set deadServers)
+79,80c111,112
+<             m_catalogJanitorEnabled = catalogJanitorEnabled;
+<             m_catalogJanitorEnabled__IsNotDefault = true;
+---
+>             m_deadServers = deadServers;
+>             m_deadServers__IsNotDefault = true;
+83c115
+<         public boolean getCatalogJanitorEnabled()
+---
+>         public Set getDeadServers()
+85c117
+<             return m_catalogJanitorEnabled;
+---
+>             return m_deadServers;
+88c120
+<         public boolean getCatalogJanitorEnabled__IsNotDefault()
+---
+>         public boolean getDeadServers__IsNotDefault()
+90c122
+<             return m_catalogJanitorEnabled__IsNotDefault;
+---
+>             return m_deadServers__IsNotDefault;
+141,173c173
+<         public void setDeadServers(Set deadServers)
+<         {
+<             m_deadServers = deadServers;
+<             m_deadServers__IsNotDefault = true;
+<         }
+< 
+<         public Set getDeadServers()
+<         {
+<             return m_deadServers;
+<         }
+< 
+<         public boolean getDeadServers__IsNotDefault()
+<         {
+<             return m_deadServers__IsNotDefault;
+<         }
+< 
+<         public void setFilter(String filter)
+<         {
+<             m_filter = filter;
+<             m_filter__IsNotDefault = true;
+<         }
+< 
+<         public String getFilter()
+<         {
+<             return m_filter;
+<         }
+< 
+<         public boolean getFilter__IsNotDefault()
+<         {
+<             return m_filter__IsNotDefault;
+<         }
+< 
+<         public void setFormat(String format)
+---
+>         public void setCatalogJanitorEnabled(boolean catalogJanitorEnabled)
+175,176c175,176
+<             m_format = format;
+<             m_format__IsNotDefault = true;
+---
+>             m_catalogJanitorEnabled = catalogJanitorEnabled;
+>             m_catalogJanitorEnabled__IsNotDefault = true;
+179c179
+<         public String getFormat()
+---
+>         public boolean getCatalogJanitorEnabled()
+181c181
+<             return m_format;
+---
+>             return m_catalogJanitorEnabled;
+184c184
+<         public boolean getFormat__IsNotDefault()
+---
+>         public boolean getCatalogJanitorEnabled__IsNotDefault()
+186c186
+<             return m_format__IsNotDefault;
+---
+>             return m_catalogJanitorEnabled__IsNotDefault;
+190a191,192
+>         private String m_format;
+>         private boolean m_format__IsNotDefault;
+192a195,196
+>         private String m_filter;
+>         private boolean m_filter__IsNotDefault;
+195,196c199,200
+<         private boolean m_catalogJanitorEnabled;
+<         private boolean m_catalogJanitorEnabled__IsNotDefault;
+---
+>         private Set m_deadServers;
+>         private boolean m_deadServers__IsNotDefault;
+203,208c207,208
+<         private Set m_deadServers;
+<         private boolean m_deadServers__IsNotDefault;
+<         private String m_filter;
+<         private boolean m_filter__IsNotDefault;
+<         private String m_format;
+<         private boolean m_format__IsNotDefault;
+---
+>         private boolean m_catalogJanitorEnabled;
+>         private boolean m_catalogJanitorEnabled__IsNotDefault;
+243a244,249
+>     public final MasterStatusTmpl setFormat(String p_format)
+>     {
+>         getImplData().setFormat(p_format);
+>         return this;
+>     }
+> 
+249a256,261
+>     public final MasterStatusTmpl setFilter(String p_filter)
+>     {
+>         getImplData().setFilter(p_filter);
+>         return this;
+>     }
+> 
+256c268
+<     public final MasterStatusTmpl setCatalogJanitorEnabled(boolean p_catalogJanitorEnabled)
+---
+>     public final MasterStatusTmpl setDeadServers(Set p_deadServers)
+258c270
+<         getImplData().setCatalogJanitorEnabled(p_catalogJanitorEnabled);
+---
+>         getImplData().setDeadServers(p_deadServers);
+280,292c292
+<     public final MasterStatusTmpl setDeadServers(Set p_deadServers)
+<     {
+<         getImplData().setDeadServers(p_deadServers);
+<         return this;
+<     }
+< 
+<     public final MasterStatusTmpl setFilter(String p_filter)
+<     {
+<         getImplData().setFilter(p_filter);
+<         return this;
+<     }
+< 
+<     public final MasterStatusTmpl setFormat(String p_format)
+---
+>     public final MasterStatusTmpl setCatalogJanitorEnabled(boolean p_catalogJanitorEnabled)
+294c294
+<         getImplData().setFormat(p_format);
+---
+>         getImplData().setCatalogJanitorEnabled(p_catalogJanitorEnabled);
+368a369
+>     protected String format;
+369a371
+>     protected String filter;
+371c373
+<     protected boolean catalogJanitorEnabled;
+---
+>     protected Set deadServers;
+375,377c377
+<     protected Set deadServers;
+<     protected String filter;
+<     protected String format;
+---
+>     protected boolean catalogJanitorEnabled;
+diff -r -b -B ./hbasenew/serversrc/src/org/apache/hadoop/hbase/tmpl/regionserver/RSStatusTmplImpl.java ./hbaseold/serversrc/src/org/apache/hadoop/hbase/tmpl/regionserver/RSStatusTmplImpl.java
+36,37d35
+<         if(!p_implData.getFilter__IsNotDefault())
+<             p_implData.setFilter("general");
+39a38,39
+>         if(!p_implData.getFilter__IsNotDefault())
+>             p_implData.setFilter("general");
+47d46
+<         filter = p_implData.getFilter();
+48a48
+>         filter = p_implData.getFilter();
+57,60c57,60
+<             TaskMonitorTmpl __jamon__var_0 = new TaskMonitorTmpl(getTemplateManager());
+<             __jamon__var_0.setFilter(filter);
+<             __jamon__var_0.setFormat("json");
+<             __jamon__var_0.renderNoFlush(jamonWriter);
+---
+>             TaskMonitorTmpl __jamon__var_10 = new TaskMonitorTmpl(getTemplateManager());
+>             __jamon__var_10.setFilter(filter);
+>             __jamon__var_10.setFormat("json");
+>             __jamon__var_10.renderNoFlush(jamonWriter);
+79,80c79,80
+<         ServerMetricsTmpl __jamon__var_1 = new ServerMetricsTmpl(getTemplateManager());
+<         __jamon__var_1.renderNoFlush(jamonWriter, regionServer.getMetrics().getRegionServerWrapper());
+---
+>         ServerMetricsTmpl __jamon__var_11 = new ServerMetricsTmpl(getTemplateManager());
+>         __jamon__var_11.renderNoFlush(jamonWriter, regionServer.getMetrics().getRegionServerWrapper());
+82,84c82,84
+<         TaskMonitorTmpl __jamon__var_2 = new TaskMonitorTmpl(getTemplateManager());
+<         __jamon__var_2.setFilter(filter);
+<         __jamon__var_2.renderNoFlush(jamonWriter);
+---
+>         TaskMonitorTmpl __jamon__var_12 = new TaskMonitorTmpl(getTemplateManager());
+>         __jamon__var_12.setFilter(filter);
+>         __jamon__var_12.renderNoFlush(jamonWriter);
+86,87c86,87
+<         RegionListTmpl __jamon__var_3 = new RegionListTmpl(getTemplateManager());
+<         __jamon__var_3.renderNoFlush(jamonWriter, regionServer, onlineRegions);
+---
+>         RegionListTmpl __jamon__var_13 = new RegionListTmpl(getTemplateManager());
+>         __jamon__var_13.renderNoFlush(jamonWriter, regionServer, onlineRegions);
+124d123
+<     private final String filter;
+125a125
+>     private final String filter;
+diff -r -b -B ./hbasenew/serversrc/src/org/apache/hadoop/hbase/tmpl/regionserver/RSStatusTmpl.java ./hbaseold/serversrc/src/org/apache/hadoop/hbase/tmpl/regionserver/RSStatusTmpl.java
+32c32
+<         public void setFilter(String filter)
+---
+>         public void setFormat(String format)
+34,35c34,35
+<             m_filter = filter;
+<             m_filter__IsNotDefault = true;
+---
+>             m_format = format;
+>             m_format__IsNotDefault = true;
+38c38
+<         public String getFilter()
+---
+>         public String getFormat()
+40c40
+<             return m_filter;
+---
+>             return m_format;
+43c43
+<         public boolean getFilter__IsNotDefault()
+---
+>         public boolean getFormat__IsNotDefault()
+45c45
+<             return m_filter__IsNotDefault;
+---
+>             return m_format__IsNotDefault;
+48c48
+<         public void setFormat(String format)
+---
+>         public void setFilter(String filter)
+50,51c50,51
+<             m_format = format;
+<             m_format__IsNotDefault = true;
+---
+>             m_filter = filter;
+>             m_filter__IsNotDefault = true;
+54c54
+<         public String getFormat()
+---
+>         public String getFilter()
+56c56
+<             return m_format;
+---
+>             return m_filter;
+59c59
+<         public boolean getFormat__IsNotDefault()
+---
+>         public boolean getFilter__IsNotDefault()
+61c61
+<             return m_format__IsNotDefault;
+---
+>             return m_filter__IsNotDefault;
+65,66d64
+<         private String m_filter;
+<         private boolean m_filter__IsNotDefault;
+68a67,68
+>         private String m_filter;
+>         private boolean m_filter__IsNotDefault;
+104c104
+<     public final RSStatusTmpl setFilter(String p_filter)
+---
+>     public final RSStatusTmpl setFormat(String p_format)
+106c106
+<         getImplData().setFilter(p_filter);
+---
+>         getImplData().setFormat(p_format);
+110c110
+<     public final RSStatusTmpl setFormat(String p_format)
+---
+>     public final RSStatusTmpl setFilter(String p_filter)
+112c112
+<         getImplData().setFormat(p_format);
+---
+>         getImplData().setFilter(p_filter);
+184d183
+<     protected String filter;
+185a185
+>     protected String filter;
+diff -r -b -B ./hbasenew/serversrc/src/org/apache/hadoop/hbase/util/FSUtils.java ./hbaseold/serversrc/src/org/apache/hadoop/hbase/util/FSUtils.java
+296,309d295
+<         Class cls;
+<         m = null;
+<         cls = fs.getClass();
+<         Path pp;
+<         if(path.isRoot())
+<             break MISSING_BLOCK_LABEL_90;
+<         pp = null;
+<         for(pp = path.getParent(); pp.depth() > 4; pp = pp.getParent());
+<         if(pp != null)
+<             return fs.getFileStatus(pp).getReplication() <= 0 ? 3 : fs.getFileStatus(pp).getReplication();
+<         break MISSING_BLOCK_LABEL_90;
+<         Throwable e1;
+<         e1;
+<         LOG.error("", e1);
+310a297,298
+>         m = null;
+>         Class cls = fs.getClass();

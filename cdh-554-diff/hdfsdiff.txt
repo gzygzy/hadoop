@@ -1,0 +1,226 @@
+Index: org/apache/hadoop/hdfs/server/namenode/AclTransformation.java
+===================================================================
+--- org/apache/hadoop/hdfs/server/namenode/AclTransformation.java	(revision 37)
++++ org/apache/hadoop/hdfs/server/namenode/AclTransformation.java	(revision 42)
+@@ -62,7 +62,7 @@
+  */
+ @InterfaceAudience.Private
+ final class AclTransformation {
+-  private static final int MAX_ENTRIES = 32;
++  private static final int MAX_ENTRIES = 64;
+ 
+   /**
+    * Filters (discards) any existing ACL entries that have the same scope, type
+Index: org/apache/hadoop/hdfs/server/blockmanagement/InvalidateBlocks.java
+===================================================================
+--- org/apache/hadoop/hdfs/server/blockmanagement/InvalidateBlocks.java	(revision 37)
++++ org/apache/hadoop/hdfs/server/blockmanagement/InvalidateBlocks.java	(revision 42)
+@@ -22,6 +22,7 @@
+ import java.util.ArrayList;
+ import java.util.Calendar;
+ import java.util.GregorianCalendar;
++import java.util.HashMap;
+ import java.util.List;
+ import java.util.Map;
+ import java.util.TreeMap;
+@@ -47,7 +48,8 @@
+ class InvalidateBlocks {
+   /** Mapping: DatanodeInfo -> Collection of Blocks */
+   private final Map<DatanodeInfo, LightWeightHashSet<Block>> node2blocks =
+-      new TreeMap<DatanodeInfo, LightWeightHashSet<Block>>();
++   //   new TreeMap<DatanodeInfo, LightWeightHashSet<Block>>();
++		  new HashMap<DatanodeInfo, LightWeightHashSet<Block>>();
+   /** The total number of blocks in the map. */
+   private long numBlocks = 0L;
+ 
+Index: org/apache/hadoop/hdfs/server/blockmanagement/CorruptReplicasMap.java
+===================================================================
+--- org/apache/hadoop/hdfs/server/blockmanagement/CorruptReplicasMap.java	(revision 37)
++++ org/apache/hadoop/hdfs/server/blockmanagement/CorruptReplicasMap.java	(revision 42)
+@@ -46,9 +46,9 @@
+     CORRUPTION_REPORTED  // client or datanode reported the corruption
+   }
+ 
+-  private final SortedMap<Block, Map<DatanodeDescriptor, Reason>> corruptReplicasMap =
+-    new TreeMap<Block, Map<DatanodeDescriptor, Reason>>();
+-
++  private final HashMap<Block, Map<DatanodeDescriptor, Reason>> corruptReplicasMap =
++  //  new TreeMap<Block, Map<DatanodeDescriptor, Reason>>();
++		  new HashMap<Block, Map<DatanodeDescriptor, Reason>>();
+   /**
+    * Mark the block belonging to datanode as corrupt.
+    *
+Index: org/apache/hadoop/hdfs/server/blockmanagement/BlockManager.java
+===================================================================
+--- org/apache/hadoop/hdfs/server/blockmanagement/BlockManager.java	(revision 37)
++++ org/apache/hadoop/hdfs/server/blockmanagement/BlockManager.java	(revision 42)
+@@ -32,6 +32,7 @@
+ import java.util.List;
+ import java.util.Map;
+ import java.util.Queue;
++import java.util.Random;
+ import java.util.Set;
+ import java.util.TreeSet;
+ import java.util.concurrent.atomic.AtomicLong;
+@@ -1086,7 +1087,8 @@
+     if (!namesystem.isPopulatingReplQueues()) {
+       return;
+     }
+-    invalidateBlocks.add(block, datanode, true);
++  //  invalidateBlocks.add(block, datanode, true);
++    invalidateBlocks.add(block, datanode, false);
+   }
+ 
+   /**
+@@ -1285,15 +1287,23 @@
+     nodesToProcess = Math.min(nodes.size(), nodesToProcess);
+ 
+     int blockCnt = 0;
+-    for (DatanodeInfo dnInfo : nodes) {
+-      int blocks = invalidateWorkForOneNode(dnInfo);
+-      if (blocks > 0) {
+-        blockCnt += blocks;
+-        if (--nodesToProcess == 0) {
+-          break;
+-        }
+-      }
++  
++    List<DatanodeInfo> toProcess=new ArrayList();
++    LOG.warn("begain to process invalidate block,number of node:"+nodesToProcess+" nodes:"+nodes+"");
++    for(int nodeCnt = 0; nodeCnt < nodesToProcess; nodeCnt++ ) {
++    		toProcess.add(nodes.get(nodeCnt));
+     }
++    blockCnt += invalidateWorkForOneNode(toProcess);
++    
++//    for (DatanodeInfo dnInfo : nodes) {
++//      int blocks = invalidateWorkForOneNode(dnInfo);
++//      if (blocks > 0) {
++//        blockCnt += blocks;
++//        if (--nodesToProcess == 0) {
++//          break;
++//        }
++//      }
++//    }
+     return blockCnt;
+   }
+ 
+@@ -2312,6 +2322,72 @@
+     }
+     return storedBlock;
+   }
++  
++  Random rand=new Random();
++  /*
++  enum ProcessType {TO_ADD,TO_INVA,TO_CORR,TO_UC,NULL};
++	private BlockInfo processReportedBlock(final DatanodeDescriptor dn,
++			final String storageID, final Block block,
++			final ReplicaState reportedState, DatanodeDescriptor delHintNode)
++			throws IOException {
++		if (rand.nextInt() % 1000 == 0)
++			if (LOG.isDebugEnabled()) {
++				LOG.debug("Reported block " + block + " on " + dn + " size "
++						+ block.getNumBytes() + " replicaState = "
++						+ reportedState);
++			}
++		if (shouldPostponeBlocksFromFuture
++				&& namesystem.isGenStampInFuture(block)) {
++			 queueReportedBlock(storageInfo, block, reportedState,
++			          QUEUE_REASON_FUTURE_GENSTAMP);
++			return null;
++		}
++
++		// find block by blockId
++		BlockInfo storedBlock = blocksMap.getStoredBlock(block);
++		if (storedBlock == null) {
++			Block nb = new Block(block);
++			if (invalidateBlocks.blockSet.contains(nb) || rand.nextBoolean()) {
++				return null;
++			}
++
++
++			addToInvalidates(nb, dn);
++			return null;
++		}
++		BlockUCState ucState = storedBlock.getBlockUCState();
++
++
++		if (invalidateBlocks.blockSet.contains(block)) {
++			return storedBlock;
++		}
++
++		BlockToMarkCorrupt c = checkReplicaCorrupt(block, reportedState,
++				storedBlock, ucState, dn);
++		if (c != null) {
++			if (shouldPostponeBlocksFromFuture) {
++				queueReportedBlock(dn, storageID, storedBlock, reportedState,
++						QUEUE_REASON_CORRUPT_STATE);
++			} else {
++				markBlockAsCorrupt(c, dn, storageID);
++			}
++			return storedBlock;
++		}
++		if (isBlockUnderConstruction(storedBlock, ucState, reportedState)) {
++			addStoredBlockUnderConstruction(new StatefulBlockInfo(
++					(BlockInfoUnderConstruction) storedBlock, block,
++					reportedState), dn, storageID);
++			return storedBlock;
++		}
++
++		if (reportedState == ReplicaState.FINALIZED
++				&& (storedBlock.findDatanode(dn) < 0 || corruptReplicas
++						.isReplicaCorrupt(storedBlock, dn))) {
++			addStoredBlock(storedBlock, dn, storageID, delHintNode, false);
++		}
++		return null;
++	}
++*/  
+ 
+   /**
+    * Queue the given reported block for later processing in the
+@@ -3560,6 +3636,46 @@
+     return toInvalidate.size();
+   }
+ 
++ 
++private int invalidateWorkForOneNode(List<DatanodeInfo> dn) {
++	  final List<Block> toInvalidate = new ArrayList();
++	    namesystem.writeLock();
++	    try {
++	      // blocks should not be replicated or removed if safe mode is on
++	      if (namesystem.isInSafeMode()) {
++	        LOG.debug("In safemode, not computing replication work");
++	        return 0;
++	      }
++	     for (DatanodeInfo dni : dn) {
++	      try {
++	    		List ret = invalidateBlocks.invalidateWork(datanodeManager
++						.getDatanode(dni));
++				if (NameNode.stateChangeLog.isInfoEnabled()) {
++					NameNode.stateChangeLog.info("BLOCK* "
++							+ getClass().getSimpleName() + ": ask " + dn
++							+ " to delete " + ret);
++				}
++				if (ret != null) {
++					toInvalidate.addAll(ret);
++				}
++	        
++	        if (toInvalidate == null) {
++	          return 0;
++	        }
++	      } catch(UnregisteredNodeException une) {
++	        return 0;
++	      }
++	     }
++	    } finally {
++	      namesystem.writeUnlock();
++	    }
++	    if (blockLog.isInfoEnabled()) {
++	      blockLog.info("BLOCK* " + getClass().getSimpleName()
++	          + ": ask " + dn + " to delete " + toInvalidate);
++	    }
++	    return toInvalidate.size();
++	  }
++
+   boolean isPlacementPolicySatisfied(Block b) {
+     List<DatanodeDescriptor> liveNodes = new ArrayList<DatanodeDescriptor>();
+     Collection<DatanodeDescriptor> corruptNodes = corruptReplicas

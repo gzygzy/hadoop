@@ -1,0 +1,421 @@
+Index: src/main/java/org/apache/hadoop/hbase/regionserver/HStore.java
+===================================================================
+--- src/main/java/org/apache/hadoop/hbase/regionserver/HStore.java	(revision 36)
++++ src/main/java/org/apache/hadoop/hbase/regionserver/HStore.java	(revision 34)
+@@ -1245,7 +1245,6 @@
+         return sfs;
+       }
+       // Do the steps necessary to complete the compaction.
+-      filesToCompact = CompactionRequest.getFilesAfterCheck(filesToCompact);
+       sfs = moveCompatedFilesIntoPlace(cr, newFiles);
+       writeCompactionWalRecord(filesToCompact, sfs);
+       replaceStoreFiles(filesToCompact, sfs);
+Index: src/main/java/org/apache/hadoop/hbase/regionserver/handler/ParallelSeekHandler.java
+===================================================================
+--- src/main/java/org/apache/hadoop/hbase/regionserver/handler/ParallelSeekHandler.java	(revision 36)
++++ src/main/java/org/apache/hadoop/hbase/regionserver/handler/ParallelSeekHandler.java	(revision 34)
+@@ -69,12 +69,4 @@
+   public void setErr(Throwable err) {
+     this.err = err;
+   }
+-  public KeyValueScanner getScanner(){
+-      return scanner;
+-  }
+- 
+-  public void setScanner(KeyValueScanner scanner){
+-      this.scanner = scanner;
+-  }
+- 
+ }
+Index: src/main/java/org/apache/hadoop/hbase/regionserver/StoreScanner.java
+===================================================================
+--- src/main/java/org/apache/hadoop/hbase/regionserver/StoreScanner.java	(revision 36)
++++ src/main/java/org/apache/hadoop/hbase/regionserver/StoreScanner.java	(revision 34)
+@@ -22,7 +22,6 @@
+ import java.io.IOException;
+ import java.io.InterruptedIOException;
+ import java.util.ArrayList;
+-import java.util.Iterator;
+ import java.util.List;
+ import java.util.NavigableSet;
+ import java.util.concurrent.CountDownLatch;
+@@ -31,7 +30,6 @@
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+-import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.hbase.Cell;
+ import org.apache.hadoop.hbase.CellUtil;
+ import org.apache.hadoop.hbase.DoNotRetryIOException;
+@@ -350,28 +348,9 @@
+     // key does not exist, then to the start of the next matching Row).
+     // Always check bloom filter to optimize the top row seek for delete
+     // family marker.
+-	List toRemove = new ArrayList();
+     if (isLazy) {
+       for (KeyValueScanner scanner : scanners) {
+-    	  try{
+-    		  scanner.requestSeek(seekKey, false, true);
+-    	  }catch(Exception e){
+-              LOG.error("", e);
+-              toRemove.add(scanner);
+-              try
+-              {
+-                  if(scanner instanceof StoreFileScanner)
+-                  {
+-                      StoreFileScanner scannerd = (StoreFileScanner)scanner;
+-                      Path p = scannerd.getReader().getHFileReader().getPath();
+-                      HRegionServer.badStoreFilePath.put(p.getPathWithoutSchemeAndAuthority(p).toString(), p.toString());
+-                  }
+-              }
+-              catch(Throwable e1)
+-              {
+-                  LOG.error("", e1);
+-              }
+-          }
++        scanner.requestSeek(seekKey, false, true);
+       }
+     } else {
+       if (!isParallelSeek) {
+@@ -380,119 +359,19 @@
+           if (totalScannersSoughtBytes >= maxRowSize) {
+             throw new RowTooBigException("Max row size allowed: " + maxRowSize
+               + ", but row is bigger than that");
+-          }   
+-          try{
+-              scanner.seek(seekKey);
+-              Cell c = scanner.peek();
+-              if (c != null ) {
+-            	  totalScannersSoughtBytes += CellUtil.estimatedSerializedSizeOf(c);
+-              }
+-          }catch(Exception e){
+-              LOG.error("", e);
+-              toRemove.add(scanner);
+-              try
+-              {
+-                  if(scanner instanceof StoreFileScanner)
+-                  {
+-                      StoreFileScanner scannerd = (StoreFileScanner)scanner;
+-                      Path p = scannerd.getReader().getHFileReader().getPath();
+-                      HRegionServer.badStoreFilePath.put(p.getPathWithoutSchemeAndAuthority(p).toString(), p.toString());
+-                  }
+-              }
+-              catch(Throwable e1)
+-              {
+-                  LOG.error("", e1);
+-              }
++          }
++          scanner.seek(seekKey);
++          Cell c = scanner.peek();
++          if (c != null ) {
++            totalScannersSoughtBytes += CellUtil.estimatedSerializedSizeOf(c);
+           }
+-          
+         }
+       } else {
+-       // parallelSeek(scanners, seekKey);
+-    	 try
+-    	 {
+-    	     parallelSeek(scanners, seekKey, toRemove);
+-    	 }
+-    	 catch(Throwable e)
+-    	 {
+-    	     LOG.error("", e);
+-    	 }
++        parallelSeek(scanners, seekKey);
+       }
+-      if(toRemove.size() != 0)
+-          try{
+-              KeyValueScanner s;
+-              for(Iterator i = toRemove.iterator(); i.hasNext(); scanners.remove(s))
+-                  s = (KeyValueScanner)i.next();
+-
+-          }
+-          catch(Exception e)
+-          {
+-              LOG.error("", e);
+-          }
+-      
+     }
+   }
+ 
+-  private void parallelSeek(List scanners, Cell kv, List toRemove)
+-	        throws IOException
+-	    {
+-	        if(scanners.isEmpty())
+-	            return;
+-	        int storeFileScannerCount = scanners.size();
+-	        CountDownLatch latch = new CountDownLatch(storeFileScannerCount);
+-	        List handlers = new ArrayList(storeFileScannerCount);
+-	        Iterator i$;
+-	        for(i$ = scanners.iterator(); i$.hasNext();)
+-	        {
+-	            KeyValueScanner scanner = (KeyValueScanner)i$.next();
+-	            if(scanner instanceof StoreFileScanner)
+-	            {
+-	                ParallelSeekHandler seekHandler = new ParallelSeekHandler(scanner, kv, readPt, latch);
+-	                executor.submit(seekHandler);
+-	                handlers.add(seekHandler);
+-	            } else
+-	            {
+-	                scanner.seek(kv);
+-	                latch.countDown();
+-	            }
+-	        }
+-
+-	        try
+-	        {
+-	            latch.await();
+-	        }
+-	        catch(InterruptedException ie)
+-	        {
+-	            throw (InterruptedIOException)(new InterruptedIOException()).initCause(ie);
+-	        }
+-	        Iterator is = handlers.iterator();
+-	        do
+-	        {
+-	            if(!is.hasNext())
+-	                break;
+-	            ParallelSeekHandler handler = (ParallelSeekHandler)is.next();
+-	            if(handler.getErr() != null)
+-	            {
+-	                LOG.error("", new IOException(handler.getErr()));
+-	                try
+-	                {
+-	                    if(handler.getScanner() instanceof StoreFileScanner)
+-	                    {
+-	                        StoreFileScanner scanner = (StoreFileScanner)handler.getScanner();
+-	                        Path p = scanner.getReader().getHFileReader().getPath();
+-	                        HRegionServer.badStoreFilePath.put(p.getPathWithoutSchemeAndAuthority(p).toString(), p.toString());
+-	                    }
+-	                }
+-	                catch(Throwable e)
+-	                {
+-	                    LOG.error("", e);
+-	                }
+-	                toRemove.add(handler.getScanner());
+-	            }
+-	        } while(true);
+-	    }
+-
+-	   
+-  
+   protected void resetKVHeap(List<? extends KeyValueScanner> scanners,
+       KVComparator comparator) throws IOException {
+     // Combine all seeked scanners with a heap
+Index: src/main/java/org/apache/hadoop/hbase/regionserver/StoreFileScanner.java
+===================================================================
+--- src/main/java/org/apache/hadoop/hbase/regionserver/StoreFileScanner.java	(revision 36)
++++ src/main/java/org/apache/hadoop/hbase/regionserver/StoreFileScanner.java	(revision 34)
+@@ -37,7 +37,6 @@
+ import org.apache.hadoop.hbase.client.Scan;
+ import org.apache.hadoop.hbase.io.hfile.HFileScanner;
+ import org.apache.hadoop.hbase.regionserver.StoreFile.Reader;
+-import org.apache.hadoop.fs.Path;
+ 
+ /**
+  * KeyValueScanner adaptor over the Reader.  It also provides hooks into
+@@ -132,37 +131,19 @@
+   }
+ 
+   public Cell next() throws IOException {
+- //   Cell retKey = cur;
+-	  Cell retKey = null;
+-    try
+-    {
+-        retKey = cur;
+-	    try {
+-	      // only seek if we aren't at the end. cur == null implies 'end'.
+-	      if (cur != null) {
+-	        hfs.next();
+-	        setCurrentCell(hfs.getKeyValue());
+-	        if (hasMVCCInfo || this.reader.isBulkLoaded()) {
+-	          skipKVsNewerThanReadpoint();
+-	        }
+-	      }
+-	    } catch(IOException e) {
+-	      throw new IOException("Could not iterate " + this, e);
+-	    }
+-    }catch(Throwable e){
+-            try
+-            {
+-                StoreFileScanner scanner = this;
+-                Path p = scanner.getReader().getHFileReader().getPath();
+-                HRegionServer.badStoreFilePath.put(p.getPathWithoutSchemeAndAuthority(p).toString(), p.toString());
+-            }
+-            catch(Throwable e2)
+-            {
+-                LOG.error("", e2);
+-            }
+-            LOG.error("", e);
+-            cur = null;
+-            return null;
++    Cell retKey = cur;
++
++    try {
++      // only seek if we aren't at the end. cur == null implies 'end'.
++      if (cur != null) {
++        hfs.next();
++        setCurrentCell(hfs.getKeyValue());
++        if (hasMVCCInfo || this.reader.isBulkLoaded()) {
++          skipKVsNewerThanReadpoint();
++        }
++      }
++    } catch(IOException e) {
++      throw new IOException("Could not iterate " + this, e);
+     }
+     return retKey;
+   }
+Index: src/main/java/org/apache/hadoop/hbase/regionserver/compactions/CompactionRequest.java
+===================================================================
+--- src/main/java/org/apache/hadoop/hbase/regionserver/compactions/CompactionRequest.java	(revision 36)
++++ src/main/java/org/apache/hadoop/hbase/regionserver/compactions/CompactionRequest.java	(revision 34)
+@@ -20,8 +20,6 @@
+ 
+ import java.util.ArrayList;
+ import java.util.Collection;
+-import java.util.Iterator;
+-import java.util.List;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+@@ -39,10 +37,6 @@
+ import com.google.common.base.Predicate;
+ import com.google.common.collect.Collections2;
+ 
+-import java.util.concurrent.ConcurrentHashMap;
+-import org.apache.hadoop.fs.Path;
+-import org.apache.hadoop.hbase.regionserver.HRegionServer;
+-
+ /**
+  * This class holds all logical details necessary to run a compaction.
+  */
+@@ -78,90 +72,10 @@
+   public CompactionRequest(Collection<StoreFile> files) {
+     this();
+     Preconditions.checkNotNull(files);
+-    checkFiles(this);
+     this.filesToCompact = files;
+     recalculateSize();
+   }
+ 
+-   private void checkFiles(CompactionRequest request)
+-   {
+-       try
+-       {
+-           List toRemove = new ArrayList();
+-           for(Iterator i = request.getFiles().iterator(); i.hasNext();)
+-           {
+-               StoreFile sf = (StoreFile)i.next();
+-               Iterator j = HRegionServer.badStoreFilePath.keySet().iterator();
+-               while(j.hasNext()) 
+-               {
+-                   String s = (String)j.next();
+-                   sf.getPath();
+-                   if(Path.getPathWithoutSchemeAndAuthority(sf.getPath()).toString().trim().equals(s.trim()))
+-                   {
+-                       try
+-                       {
+-                           LOG.error((new StringBuilder()).append("remove bad store file:").append(sf).toString());
+-                       }
+-                       catch(Exception e)
+-                       {
+-                           LOG.error("", e);
+-                       }
+-                       toRemove.add(sf);
+-                   }
+-               }
+-           }
+-	
+-           StoreFile sf;
+-           for(Iterator k = toRemove.iterator(); k.hasNext(); request.getFiles().remove(sf))
+-               sf = (StoreFile)k.next();
+-	
+-       }
+-       catch(Throwable e)
+-       {
+-           LOG.error("", e);
+-       }
+-   }
+-   
+-   public static Collection getFilesAfterCheck(Collection old)
+-   {
+-       try
+-       {
+-           List toRemove = new ArrayList();
+-           for(Iterator i = old.iterator(); i.hasNext();)
+-           {
+-               StoreFile sf = (StoreFile)i.next();
+-               Iterator j = HRegionServer.badStoreFilePath.keySet().iterator();
+-               while(j.hasNext()) 
+-               {
+-                   String s = (String)j.next();
+-                   sf.getPath();
+-                   if(Path.getPathWithoutSchemeAndAuthority(sf.getPath()).toString().trim().equals(s.trim()))
+-                   {
+-                       try
+-                       {
+-                           LOG.error((new StringBuilder()).append("remove bad store file:").append(sf).toString());
+-                       }
+-                       catch(Exception e)
+-                       {
+-                           LOG.error("", e);
+-                       }
+-                       toRemove.add(sf);
+-                   }
+-               }
+-           }
+-   
+-           StoreFile sf;
+-           for(Iterator k = toRemove.iterator(); k.hasNext(); old.remove(sf))
+-               sf = (StoreFile)k.next();
+-   
+-       }
+-       catch(Throwable e)
+-       {
+-           LOG.error("", e);
+-       }
+-       return old;
+-   }
+-   
+   /**
+    * Called before compaction is executed by CompactSplitThread; for use by coproc subclasses.
+    */
+Index: src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java
+===================================================================
+--- src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java	(revision 36)
++++ src/main/java/org/apache/hadoop/hbase/regionserver/HRegionServer.java	(revision 34)
+@@ -454,33 +454,6 @@
+    * when the regionserver is notified that there was a change in the on disk configs.
+    */
+   protected final ConfigurationManager configurationManager;
+-  
+-  public static ConcurrentHashMap badStoreFilePath = new ConcurrentHashMap();
+-  static 
+-   {
+-	  //int macc = conf.getInt("pezy.hbase.ipc.connection", 1);
+-       Thread logBadFile = new Thread() {
+- 
+-           public void run()
+-           {
+-               do
+-                   try
+-                   {
+-                       sleep(60000L);
+-                       if(!HRegionServer.badStoreFilePath.isEmpty())
+-                       HRegionServer.LOG.error((new StringBuilder()).append("bad hfiles are:").append(HRegionServer.badStoreFilePath).toString());
+-                   }
+-                   catch(Throwable e)
+-                   {
+-                       HRegionServer.LOG.error("", e);
+-                   }
+-               while(true);
+-           }
+- 
+-       };
+-       logBadFile.setDaemon(true);
+-       logBadFile.start();
+-   }
+ 
+   /**
+    * Starts a HRegionServer at the default location.

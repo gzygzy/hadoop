@@ -1,0 +1,19 @@
+Binary files hadoop-2.3.0-cdh5.1.3/.DS_Store and hadoop-2.3.0-cdh5.1.3-src-complied/.DS_Store differ
+Only in hadoop-2.3.0-cdh5.1.3-src-complied/: .project
+Only in hadoop-2.3.0-cdh5.1.3-src-complied/: .settings
+Common subdirectories: hadoop-2.3.0-cdh5.1.3/cloudera and hadoop-2.3.0-cdh5.1.3-src-complied/cloudera
+Common subdirectories: hadoop-2.3.0-cdh5.1.3/dev-support and hadoop-2.3.0-cdh5.1.3-src-complied/dev-support
+Common subdirectories: hadoop-2.3.0-cdh5.1.3/hadoop-assemblies and hadoop-2.3.0-cdh5.1.3-src-complied/hadoop-assemblies
+Common subdirectories: hadoop-2.3.0-cdh5.1.3/hadoop-client and hadoop-2.3.0-cdh5.1.3-src-complied/hadoop-client
+Common subdirectories: hadoop-2.3.0-cdh5.1.3/hadoop-common-project and hadoop-2.3.0-cdh5.1.3-src-complied/hadoop-common-project
+Common subdirectories: hadoop-2.3.0-cdh5.1.3/hadoop-dist and hadoop-2.3.0-cdh5.1.3-src-complied/hadoop-dist
+Common subdirectories: hadoop-2.3.0-cdh5.1.3/hadoop-hdfs-project and hadoop-2.3.0-cdh5.1.3-src-complied/hadoop-hdfs-project
+Common subdirectories: hadoop-2.3.0-cdh5.1.3/hadoop-mapreduce-project and hadoop-2.3.0-cdh5.1.3-src-complied/hadoop-mapreduce-project
+Common subdirectories: hadoop-2.3.0-cdh5.1.3/hadoop-mapreduce1-project and hadoop-2.3.0-cdh5.1.3-src-complied/hadoop-mapreduce1-project
+Common subdirectories: hadoop-2.3.0-cdh5.1.3/hadoop-maven-plugins and hadoop-2.3.0-cdh5.1.3-src-complied/hadoop-maven-plugins
+Common subdirectories: hadoop-2.3.0-cdh5.1.3/hadoop-minicluster and hadoop-2.3.0-cdh5.1.3-src-complied/hadoop-minicluster
+Common subdirectories: hadoop-2.3.0-cdh5.1.3/hadoop-project and hadoop-2.3.0-cdh5.1.3-src-complied/hadoop-project
+Common subdirectories: hadoop-2.3.0-cdh5.1.3/hadoop-project-dist and hadoop-2.3.0-cdh5.1.3-src-complied/hadoop-project-dist
+Common subdirectories: hadoop-2.3.0-cdh5.1.3/hadoop-tools and hadoop-2.3.0-cdh5.1.3-src-complied/hadoop-tools
+Common subdirectories: hadoop-2.3.0-cdh5.1.3/hadoop-yarn-project and hadoop-2.3.0-cdh5.1.3-src-complied/hadoop-yarn-project
+Only in hadoop-2.3.0-cdh5.1.3-src-complied/: target

@@ -1,0 +1,132 @@
+diff -r -B -b ./hbasenew/clientsrc/src/org/apache/hadoop/hbase/client/HConnectionManager.java ./hbaseold/clientsrc/src/org/apache/hadoop/hbase/client/HConnectionManager.java
+852,864c852,853
+<             {
+<                 if(useCache)
+<                 {
+<                     if(metaLoc == null)
+<                         metaLoc = registry.getMetaRegionLocation();
+<                     return metaLoc;
+<                 } else
+<                 {
+<                     metaLoc = registry.getMetaRegionLocation();
+<                     return metaLoc;
+<                 }
+<             } else
+<             {
+---
+>                 return registry.getMetaRegionLocation();
+>             else
+867d855
+<         }
+941c929
+<                 break MISSING_BLOCK_LABEL_852;
+---
+>                 break MISSING_BLOCK_LABEL_833;
+945,946d932
+<                 break MISSING_BLOCK_LABEL_236;
+<             if(!TableName.META_TABLE_NAME.equals(parentTable) || !getRegionCachePrefetch(tableName))
+948,950c934,935
+<             location = getCachedLocation(tableName, row);
+<             if(location != null)
+<                 return location;
+---
+>             if(!TableName.META_TABLE_NAME.equals(parentTable) || !getRegionCachePrefetch(tableName))
+>                 break MISSING_BLOCK_LABEL_204;
+959c944
+<             break MISSING_BLOCK_LABEL_220;
+---
+>             break MISSING_BLOCK_LABEL_204;
+966c951
+<             break MISSING_BLOCK_LABEL_242;
+---
+>             break MISSING_BLOCK_LABEL_226;
+1021,1030d1005
+<             HashMap map;
+<             if((map = (HashMap)lastKey.get()) == null && map == null)
+<                 lastKey.set(new HashMap());
+<             Pair p = (Pair)((HashMap)lastKey.get()).get(tableName);
+<             if(p != null && Bytes.compareTo(row, (byte[])((Pair)p.getSecond()).getFirst()) >= 0)
+<             {
+<                 byte endKey[] = (byte[])((Pair)p.getSecond()).getSecond();
+<                 if((Bytes.equals(endKey, HConstants.EMPTY_END_ROW) || tableName.getRowComparator().compareRows(endKey, 0, endKey.length, row, 0, row.length) > 0) && p.getFirst() != null)
+<                     return (HRegionLocation)p.getFirst();
+<             }
+1038,1039d1012
+<             {
+<                 ((HashMap)lastKey.get()).put(tableName, new Pair(possibleRegion, new Pair(possibleRegion.getRegionInfo().getStartKey(), endKey)));
+1041,1042c1014
+<             } else
+<             {
+---
+>             else
+1045d1016
+<         }
+1103d1073
+<             HConnectionImplementation _tmp = this;
+1108d1077
+<                 HConnectionImplementation _tmp1 = this;
+1118d1086
+<             HConnectionImplementation _tmp = this;
+1125d1092
+<             HConnectionImplementation _tmp = this;
+1725d1691
+<             HConnectionImplementation _tmp = this;
+2011c1977
+<         private static final ConcurrentMap cachedRegionLocations = new ConcurrentHashMap();
+---
+>         private final ConcurrentMap cachedRegionLocations;
+2019,2020d1984
+<         static HRegionLocation metaLoc = null;
+<         ThreadLocal lastKey;
+2095a2060
+>             cachedRegionLocations = new ConcurrentHashMap();
+2099,2100d2063
+<             lastKey = new ThreadLocal();
+<             lastKey.set(new HashMap());
+Only in ./hbasenew/clientsrc/src/org/apache/hadoop/hbase/client: Tester.java
+diff -r -B -b ./hbasenew/clientsrc/src/org/apache/hadoop/hbase/ipc/RpcClient.java ./hbaseold/clientsrc/src/org/apache/hadoop/hbase/ipc/RpcClient.java
+103c103
+<                 return address.equals(id.address) && (ticket != null && ticket.equals(id.ticket) || ticket == id.ticket) && rpcTimeout == id.rpcTimeout && serviceName == id.serviceName || flag == id.flag;
+---
+>                 return address.equals(id.address) && (ticket != null && ticket.equals(id.ticket) || ticket == id.ticket) && rpcTimeout == id.rpcTimeout && serviceName == id.serviceName;
+112c112
+<             int hashcode = address.hashCode() + 0x1000193 * (0x1000193 * serviceName.hashCode() ^ (ticket != null ? ticket.hashCode() : 0)) ^ rpcTimeout ^ flag;
+---
+>             int hashcode = address.hashCode() + 0x1000193 * (0x1000193 * serviceName.hashCode() ^ (ticket != null ? ticket.hashCode() : 0)) ^ rpcTimeout;
+121,122d120
+<         int flag;
+<         int maxFlag;
+126,127d123
+<             flag = 0;
+<             maxFlag = 3;
+132d127
+<             flag = (int)(Thread.currentThread().getId() % (long)maxFlag);
+246d240
+<             System.out.println((new StringBuilder()).append("seq up seq is:").append(RpcClient.seq++).toString());
+757c751
+<             break MISSING_BLOCK_LABEL_504;
+---
+>             break MISSING_BLOCK_LABEL_500;
+761d754
+<             {
+763,765c756
+<             } else
+<             {
+<                 e.printStackTrace();
+---
+>             else
+767d757
+<             }
+770c760
+<             break MISSING_BLOCK_LABEL_504;
+---
+>             break MISSING_BLOCK_LABEL_500;
+794d783
+<                 RpcClient.LOG.debug("", e);
+1090c1079
+<         maxIdleTime = conf.getInt("hbase.ipc.client.connection.maxidletime", 0xf4240);
+---
+>         maxIdleTime = conf.getInt("hbase.ipc.client.connection.maxidletime", 10000);
+1382,1383d1370
+<     public static int seq = 0;
+<     int maxConnection;

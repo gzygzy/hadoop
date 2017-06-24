@@ -1,0 +1,716 @@
+diff -x .java -rbB ./hadoop-2.3.0-cdh5.1.3-old/hadoop-hdfs-project/hadoop-hdfs/src/main/java/org/apache/hadoop/hdfs/server/blockmanagement/BlockManager.java ./hadoop-2.3.0-cdh5.1.3-src-complied/hadoop-hdfs-project/hadoop-hdfs/src/main/java/org/apache/hadoop/hdfs/server/blockmanagement/BlockManager.java
+34a35
+> import java.util.Random;
+187c188
+<     new TreeMap<String, LightWeightLinkedSet<Block>>();
+---
+>     new HashMap<String, LightWeightLinkedSet<Block>>();
+1054c1055,1056
+<     invalidateBlocks.add(block, datanode, true);
+---
+> 	  //if(this.blocksMap.getBlockCollection(block)==null)
+>     invalidateBlocks.add(block, datanode, false);
+1202a1206,1207
+>     LOG.warn("begain to process invalidate block,number of node:"+nodesToProcess+" nodes:"+nodes+
+>     		"");
+1204a1210,1211
+>     List<DatanodeInfo> toProcess=new ArrayList();
+> 
+1206c1213
+<       blockCnt += invalidateWorkForOneNode(nodes.get(nodeCnt));
+---
+>     		toProcess.add(nodes.get(nodeCnt));
+1207a1215,1220
+>     blockCnt += invalidateWorkForOneNode(toProcess);
+> //    for(int nodeCnt = 0; nodeCnt < nodesToProcess; nodeCnt++ ) {
+> //    	toProcess.add(nodes.get(nodeCnt));
+> //      blockCnt += invalidateWorkForOneNode(nodes.get(nodeCnt));
+> //   	LOG.warn("to process block deletion,number:"+blockCnt+" nodes:"+nodes.get(nodeCnt)+"");
+> //    }
+1715a1729,1731
+>         try {
+>         	///Liujia
+> 			namesystem.writeUnlock();
+1716a1733,1735
+> 		} catch (Throwable e) {
+> 			
+> 		}
+1720a1740,1741
+>       try
+>       {
+1722a1744,1748
+>       catch(Throwable e)
+>       {
+>     	  
+>       }
+>     }
+1837c1863
+<       
+---
+>       //blocksMap.addBlockCollection(b, bc)
+1921a1948,2009
+> 	private BlockInfo processReportedBlock(final DatanodeDescriptor dn,
+> 			final String storageID, final Block block,
+> 			final ReplicaState reportedState, DatanodeDescriptor delHintNode)
+> 			throws IOException {
+> 		if (rand.nextInt() % 1000 == 0)
+> 			if (LOG.isDebugEnabled()) {
+> 				LOG.debug("Reported block " + block + " on " + dn + " size "
+> 						+ block.getNumBytes() + " replicaState = "
+> 						+ reportedState);
+> 			}
+> 		if (shouldPostponeBlocksFromFuture
+> 				&& namesystem.isGenStampInFuture(block)) {
+> 			queueReportedBlock(dn, storageID, block, reportedState,
+> 					QUEUE_REASON_FUTURE_GENSTAMP);
+> 			return null;
+> 		}
+> 
+> 		// find block by blockId
+> 		BlockInfo storedBlock = blocksMap.getStoredBlock(block);
+> 		if (storedBlock == null) {
+> 			Block nb = new Block(block);
+> 			if (invalidateBlocks.blockSet.contains(nb) || rand.nextBoolean()) {
+> 				return null;
+> 			}
+> 
+> 
+> 			addToInvalidates(nb, dn);
+> 			return null;
+> 		}
+> 		BlockUCState ucState = storedBlock.getBlockUCState();
+> 
+> 
+> 		if (invalidateBlocks.blockSet.contains(block)) {
+> 			return storedBlock;
+> 		}
+> 
+> 		BlockToMarkCorrupt c = checkReplicaCorrupt(block, reportedState,
+> 				storedBlock, ucState, dn);
+> 		if (c != null) {
+> 			if (shouldPostponeBlocksFromFuture) {
+> 				queueReportedBlock(dn, storageID, storedBlock, reportedState,
+> 						QUEUE_REASON_CORRUPT_STATE);
+> 			} else {
+> 				markBlockAsCorrupt(c, dn, storageID);
+> 			}
+> 			return storedBlock;
+> 		}
+> 		if (isBlockUnderConstruction(storedBlock, ucState, reportedState)) {
+> 			addStoredBlockUnderConstruction(new StatefulBlockInfo(
+> 					(BlockInfoUnderConstruction) storedBlock, block,
+> 					reportedState), dn, storageID);
+> 			return storedBlock;
+> 		}
+> 
+> 		if (reportedState == ReplicaState.FINALIZED
+> 				&& (storedBlock.findDatanode(dn) < 0 || corruptReplicas
+> 						.isReplicaCorrupt(storedBlock, dn))) {
+> 			addStoredBlock(storedBlock, dn, storageID, delHintNode, false);
+> 		}
+> 		return null;
+> 	}
+> 
+1960c2048
+<     
+---
+> 	  if(rand.nextInt()%1000==0)
+1966a2055,2057
+>     //LOG.info("shouldPostponeBlocksFromFuture:"+shouldPostponeBlocksFromFuture+" isGenStampInFuture:"+namesystem.isGenStampInFuture(block));
+>     
+>     //LOG.info("blockmap size:"+this.blocksMap.size()+" replica state:"+reportedState);
+2398a2490,2491
+>   
+>   
+2567a2661,2673
+>   boolean lockHere=false;
+>   try {
+> 	  
+> 	  if(!namesystem.hasWriteLock())
+> 	  {
+> 		  namesystem.writeLock();
+> 		  lockHere=true;
+> 	  }
+> 	} catch (Throwable e) {
+> 
+> 	}
+>     try
+>       {
+2568a2675,2681
+>       }finally
+>       {
+>     	  if(lockHere)
+>     	  {
+>       namesystem.writeUnlock();
+>     	  }
+>       }
+2835c2948,2949
+<   
+---
+>   Random rand=new Random();
+>   enum ProcessType {TO_ADD,TO_INVA,TO_CORR,TO_UC,NULL};
+2840,2850d2953
+<     // blockReceived reports a finalized block
+<     Collection<BlockInfo> toAdd = new LinkedList<BlockInfo>();
+<     Collection<Block> toInvalidate = new LinkedList<Block>();
+<     Collection<BlockToMarkCorrupt> toCorrupt = new LinkedList<BlockToMarkCorrupt>();
+<     Collection<StatefulBlockInfo> toUC = new LinkedList<StatefulBlockInfo>();
+<     processReportedBlock(node, storageID, block, reportedState,
+<                               toAdd, toInvalidate, toCorrupt, toUC);
+<     // the block is only in one of the to-do lists
+<     // if it is in none then data-node already has it
+<     assert toUC.size() + toAdd.size() + toInvalidate.size() + toCorrupt.size() <= 1
+<       : "The block should be only in one of the lists.";
+2852,2872c2955,2995
+<     for (StatefulBlockInfo b : toUC) { 
+<       addStoredBlockUnderConstruction(b, node, storageID);
+<     }
+<     long numBlocksLogged = 0;
+<     for (BlockInfo b : toAdd) {
+<       addStoredBlock(b, node, storageID, delHintNode, numBlocksLogged < maxNumBlocksToLog);
+<       numBlocksLogged++;
+<     }
+<     if (numBlocksLogged > maxNumBlocksToLog) {
+<       blockLog.info("BLOCK* addBlock: logged info for " + maxNumBlocksToLog
+<           + " of " + numBlocksLogged + " reported.");
+<     }
+<     for (Block b : toInvalidate) {
+<       blockLog.info("BLOCK* addBlock: block "
+<           + b + " on " + node + " size " + b.getNumBytes()
+<           + " does not belong to any file");
+<       addToInvalidates(b, node);
+<     }
+<     for (BlockToMarkCorrupt b : toCorrupt) {
+<       markBlockAsCorrupt(b, node, storageID);
+<     }
+---
+> 	  processReportedBlock(node, storageID, block, reportedState,delHintNode);
+> //    // blockReceived reports a finalized block
+> //    Collection<BlockInfo> toAdd = new LinkedList<BlockInfo>();
+> //    Collection<Block> toInvalidate = new LinkedList<Block>();
+> //    Collection<BlockToMarkCorrupt> toCorrupt = new LinkedList<BlockToMarkCorrupt>();
+> //    Collection<StatefulBlockInfo> toUC = new LinkedList<StatefulBlockInfo>();
+> //    processReportedBlock(node, storageID, block, reportedState,
+> //                              toAdd, toInvalidate, toCorrupt, toUC);
+> //    // the block is only in one of the to-do lists
+> //    // if it is in none then data-node already has it
+> //    assert toUC.size() + toAdd.size() + toInvalidate.size() + toCorrupt.size() <= 1
+> //      : "The block should be only in one of the lists.";
+> //
+> //    for (StatefulBlockInfo b : toUC) { 
+> //      addStoredBlockUnderConstruction(b, node, storageID);
+> //    }
+> //    long numBlocksLogged = 0;
+> //    for (BlockInfo b : toAdd) {
+> //      addStoredBlock(b, node, storageID, delHintNode, numBlocksLogged < maxNumBlocksToLog);
+> //      numBlocksLogged++;
+> //    }
+> //    if (numBlocksLogged > maxNumBlocksToLog) {
+> //      blockLog.info("BLOCK* addBlock: logged info for " + maxNumBlocksToLog
+> //          + " of " + numBlocksLogged + " reported.");
+> //    }
+> //    for (Block b : toInvalidate) {
+> //    	 if(invalidateBlocks.blockSet.contains(b)||rand.nextBoolean())
+> //    	 {
+> //    		 continue;
+> //    	 } 
+> //    	 
+> ////      blockLog.info("BLOCK* addBlock: block "
+> ////          + b + " on " + node + " size " + b.getNumBytes()
+> ////          + " does not belong to any file");
+> //    	 if(rand.nextInt()%1000==0)
+> //      LOG.warn("invalidated blocks:"+invalidateBlocks.numBlocks());
+> //      addToInvalidates(b, node);
+> //    }
+> //    for (BlockToMarkCorrupt b : toCorrupt) {
+> //      markBlockAsCorrupt(b, node, storageID);
+> //    }
+2952,2954c3075,3086
+<     Collection<DatanodeDescriptor> nodesCorrupt = corruptReplicas.getNodes(b);
+<     for(DatanodeStorageInfo storage : blocksMap.getStorages(b, State.NORMAL)) {
+<       final DatanodeDescriptor node = storage.getDatanodeDescriptor();
+---
+> 		Collection<DatanodeDescriptor> nodesCorrupt = corruptReplicas
+> 				.getNodes(b);
+> 		BlockInfo info = blocksMap.getStoredBlock(b);
+> 
+> 		if (info != null)
+> 
+> 		{
+> 			for (int index = 0; index < info.getCapacity(); index++) {
+> 				DatanodeStorageInfo storage = info.getStorageInfo(index);
+> 				if (storage != null) {
+> 					final DatanodeDescriptor node = storage
+> 							.getDatanodeDescriptor();
+2957c3089,3090
+<       } else if (node.isDecommissionInProgress() || node.isDecommissioned()) {
+---
+> 					} else if (node.isDecommissionInProgress()
+> 							|| node.isDecommissioned()) {
+2960,2961c3093,3094
+<         LightWeightLinkedSet<Block> blocksExcess = excessReplicateMap.get(node
+<             .getDatanodeUuid());
+---
+> 						LightWeightLinkedSet<Block> blocksExcess = excessReplicateMap
+> 								.get(node.getDatanodeUuid());
+2971a3105,3126
+> 			}
+> 		}
+>  
+> //    for(DatanodeStorageInfo storage : blocksMap.getStorages(b, State.NORMAL)) {
+> //      final DatanodeDescriptor node = storage.getDatanodeDescriptor();
+> //      if ((nodesCorrupt != null) && (nodesCorrupt.contains(node))) {
+> //        corrupt++;
+> //      } else if (node.isDecommissionInProgress() || node.isDecommissioned()) {
+> //        decommissioned++;
+> //      } else {
+> //        LightWeightLinkedSet<Block> blocksExcess = excessReplicateMap.get(node
+> //            .getDatanodeUuid());
+> //        if (blocksExcess != null && blocksExcess.contains(b)) {
+> //          excess++;
+> //        } else {
+> //          live++;
+> //        }
+> //      }
+> //      if (storage.areBlockContentsStale()) {
+> //        stale++;
+> //      }
+> //    }
+3203a3359,3400
+> 	/**
+> 	 * Get blocks to invalidate for <i>nodeId</i> in {@link #invalidateBlocks}.
+> 	 *
+> 	 * @return number of blocks scheduled for removal during this iteration.
+> 	 */
+> 	private int invalidateWorkForOneNode(List<DatanodeInfo> dn) {
+> 		final List<Block> toInvalidate = new ArrayList();
+> 
+> 		namesystem.writeLock();
+> 		try {
+> 			for (DatanodeInfo dni : dn) {
+> 
+> 				// blocks should not be replicated or removed if safe mode is on
+> 				if (namesystem.isInSafeMode()) {
+> 					LOG.debug("In safemode, not computing replication work");
+> 					return 0;
+> 				}
+> 				try {
+> 					List ret = invalidateBlocks.invalidateWork(datanodeManager
+> 							.getDatanode(dni));
+> 					if (NameNode.stateChangeLog.isInfoEnabled()) {
+> 						NameNode.stateChangeLog.info("BLOCK* "
+> 								+ getClass().getSimpleName() + ": ask " + dn
+> 								+ " to delete " + ret);
+> 					}
+> 					if (ret != null) {
+> 						toInvalidate.addAll(ret);
+> 					}
+> 
+> 					if (toInvalidate == null) {
+> 						return 0;
+> 					}
+> 				} catch (UnregisteredNodeException une) {
+> 					return 0;
+> 				}
+> 
+> 			}
+> 		} finally {
+> 			namesystem.writeUnlock();
+> 		}
+> 		return toInvalidate.size();
+> 	}
+3408c3605
+<     final int nodesToProcess = (int) Math.ceil(numlive
+---
+>     final int nodesToProcess = (int) Math.ceil(Math.max(numlive,invalidateBlocks.getDatanodes().size())
+diff -x .java -rbB ./hadoop-2.3.0-cdh5.1.3-old/hadoop-hdfs-project/hadoop-hdfs/src/main/java/org/apache/hadoop/hdfs/server/blockmanagement/BlockPlacementPolicyDefault.java ./hadoop-2.3.0-cdh5.1.3-src-complied/hadoop-hdfs-project/hadoop-hdfs/src/main/java/org/apache/hadoop/hdfs/server/blockmanagement/BlockPlacementPolicyDefault.java
+27a28
+> import java.util.WeakHashMap;
+578a580,610
+> 	private static WeakHashMap<DatanodeStorageInfo,Boolean> map=new WeakHashMap();
+> 	private static WeakHashMap<String,String> cacheMap=new WeakHashMap();
+> 	static {
+> 		Thread d=new Thread()
+> 		{
+> 			public void run()
+> 			{
+> 				int times=0;
+> 				while(true)
+> 				{
+> 					times++;
+> 			
+> 					try {
+> 						sleep(1000*6*15);
+> 					} catch (InterruptedException e) {
+> 					}
+> 					if(times%10==0)
+> 					{
+> 						map.clear();
+> 					}
+> 					else if(times%3==0)
+> 					{
+> 						cacheMap.clear();
+> 					}
+> 					
+> 				}
+> 			}
+> 		};
+> 		d.setDaemon(true);
+> 		d.start();
+> 	}
+601a635,640
+> 	  Boolean b=map.get(storage);
+> 	  if(b!=null)
+> 	  {
+> 		  return b;
+> 	  }
+> 
+605a645
+>       //map.put(storage,false);
+609a650
+>       //map.put(storage,false);
+615a657
+>       //map.put(storage,false);
+621a664
+>         //map.put(storage,false);
+629a673
+>       //map.put(storage,false);
+635a680,687
+>     	String avgL=cacheMap.get("avgLoad");
+>         if(avgL!=null)
+>         {
+>       	  	avgLoad=Double.parseDouble(avgL);
+>         }
+>         else
+>         {
+>       
+639a692
+>           cacheMap.put("avgLoad",avgLoad+"");
+641a695,696
+>         }
+> 
+643a699
+>         //map.put(storage,false);
+658a715
+>       //map.put(storage,false);
+660a718
+>     //map.put(storage,true);
+diff -x .java -rbB ./hadoop-2.3.0-cdh5.1.3-old/hadoop-hdfs-project/hadoop-hdfs/src/main/java/org/apache/hadoop/hdfs/server/blockmanagement/CorruptReplicasMap.java ./hadoop-2.3.0-cdh5.1.3-src-complied/hadoop-hdfs-project/hadoop-hdfs/src/main/java/org/apache/hadoop/hdfs/server/blockmanagement/CorruptReplicasMap.java
+49,50c49,50
+<   private SortedMap<Block, Map<DatanodeDescriptor, Reason>> corruptReplicasMap =
+<     new TreeMap<Block, Map<DatanodeDescriptor, Reason>>();
+---
+>   private HashMap<Block, Map<DatanodeDescriptor, Reason>> corruptReplicasMap =
+>     new HashMap<Block, Map<DatanodeDescriptor, Reason>>();
+diff -x .java -rbB ./hadoop-2.3.0-cdh5.1.3-old/hadoop-hdfs-project/hadoop-hdfs/src/main/java/org/apache/hadoop/hdfs/server/blockmanagement/DatanodeManager.java ./hadoop-2.3.0-cdh5.1.3-src-complied/hadoop-hdfs-project/hadoop-hdfs/src/main/java/org/apache/hadoop/hdfs/server/blockmanagement/DatanodeManager.java
+1083c1083
+< 
+---
+>     List<DatanodeDescriptor> results =null;
+1086c1086
+<       final List<DatanodeDescriptor> results =
+---
+>       results =
+1087a1088,1092
+> 
+>     } finally {
+>       namesystem.readUnlock();
+>     }
+>     //LiuJia
+1099,1102d1103
+<     } finally {
+<       namesystem.readUnlock();
+<     }
+<     
+1206a1208
+>     	ArrayList<DatanodeDescriptor> list=new ArrayList();
+1217c1219,1220
+<         foundNodes.add(HostFileManager.resolvedAddressFromDatanodeID(dn));
+---
+>         list.add(dn);
+>        
+1219a1223,1229
+>     //LiuJia
+>     for(DatanodeDescriptor dn:list)
+>     {
+>     	
+>     	foundNodes.add(HostFileManager.resolvedAddressFromDatanodeID(dn));
+>     }
+>   
+diff -x .java -rbB ./hadoop-2.3.0-cdh5.1.3-old/hadoop-hdfs-project/hadoop-hdfs/src/main/java/org/apache/hadoop/hdfs/server/blockmanagement/HostFileManager.java ./hadoop-2.3.0-cdh5.1.3-src-complied/hadoop-hdfs-project/hadoop-hdfs/src/main/java/org/apache/hadoop/hdfs/server/blockmanagement/HostFileManager.java
+39a42
+> import java.util.HashMap;
+42a46
+> import java.util.concurrent.ConcurrentHashMap;
+101c105
+< 
+---
+>   static ConcurrentHashMap<DatanodeID,InetSocketAddress> cacheMap=new ConcurrentHashMap();
+103c107,111
+<     return new InetSocketAddress(id.getIpAddr(), id.getXferPort());
+---
+> 	  if(cacheMap.get(id)==null)
+> 	  {
+> 		  cacheMap.put(id,new InetSocketAddress(id.getIpAddr(), id.getXferPort()));
+> 	  }
+>     return cacheMap.get(id);
+diff -x .java -rbB ./hadoop-2.3.0-cdh5.1.3-old/hadoop-hdfs-project/hadoop-hdfs/src/main/java/org/apache/hadoop/hdfs/server/blockmanagement/InvalidateBlocks.java ./hadoop-2.3.0-cdh5.1.3-src-complied/hadoop-hdfs-project/hadoop-hdfs/src/main/java/org/apache/hadoop/hdfs/server/blockmanagement/InvalidateBlocks.java
+24a25
+> import java.util.HashMap;
+26a28
+> import java.util.Random;
+29a32
+> import org.apache.commons.logging.LogFactory;
+46a50
+> 	 static final Log LOG = LogFactory.getLog(InvalidateBlocks .class);
+49c53,54
+<       new TreeMap<DatanodeInfo, LightWeightHashSet<Block>>();
+---
+>       new HashMap<DatanodeInfo, LightWeightHashSet<Block>>();
+>   LightWeightHashSet<Block> blockSet =new LightWeightHashSet<Block>();
+99c104
+< 
+---
+>   Random rand=new Random();
+105a111,114
+> 	  if(blockSet.contains(block))
+> 	  {
+> 		  return;
+> 	  }
+110a120,121
+> 	if (rand.nextInt() % 1000 == 0)
+> 		LOG.warn("invalidated blocks:" + this.numBlocks()+" set size:"+this.blockSet.size()+" node is:"+datanode+" size of this node:"+set.size());
+112a124
+>       blockSet.add(block);
+123a136,139
+>     	for(Block b:blocks)
+>     	{
+>     		blockSet.remove(b);
+>     	}
+131a148,150
+> 
+>     	    	blockSet.remove(block);
+>     	    
+194a214,217
+>     for(Block b:toInvalidate)
+>     {
+>     	blockSet.remove(b);
+>     }
+200a224
+>     blockSet.clear();
+diff -x .java -rbB ./hadoop-2.3.0-cdh5.1.3-old/hadoop-hdfs-project/hadoop-hdfs/src/main/java/org/apache/hadoop/hdfs/server/namenode/FSImage.java ./hadoop-2.3.0-cdh5.1.3-src-complied/hadoop-hdfs-project/hadoop-hdfs/src/main/java/org/apache/hadoop/hdfs/server/namenode/FSImage.java
+667c667
+<     
+---
+>     LOG.warn("before load edit log,block number is:"+target.getBlockManager().getActiveBlockCount());
+681a682
+>     LOG.warn("after load edit log,block number is:"+target.getBlockManager().getActiveBlockCount());
+diff -x .java -rbB ./hadoop-2.3.0-cdh5.1.3-old/hadoop-hdfs-project/hadoop-hdfs/src/main/java/org/apache/hadoop/hdfs/server/namenode/NameNode.java ./hadoop-2.3.0-cdh5.1.3-src-complied/hadoop-hdfs-project/hadoop-hdfs/src/main/java/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+728a729
+>     			e.printStackTrace();
+729a731
+>       	
+diff -x .java -rbB ./hadoop-2.3.0-cdh5.1.3-old/hadoop-mapreduce-project/hadoop-mapreduce-client/hadoop-mapreduce-client-core/src/main/java/org/apache/hadoop/mapreduce/JobSubmitter.java ./hadoop-2.3.0-cdh5.1.3-src-complied/hadoop-mapreduce-project/hadoop-mapreduce-client/hadoop-mapreduce-client-core/src/main/java/org/apache/hadoop/mapreduce/JobSubmitter.java
+308a309,330
+>   private void processBEHParam(Configuration conf )
+>   {
+> 	  String perportys=System.getProperty("java.behparam");
+> 	  LOG.info("behparam value:"+perportys);
+> 	  if(perportys!=null&&perportys.length()>0)
+> 	  {
+> 		  String[]kvs=perportys.split(conf.get("beh.param.spliter.param",";"));
+> 		  for(String kv:kvs)
+> 		  {
+> 			  String vv[]=kv.split(conf.get("beh.param.spliter.keyv",":"));
+> 			  if(vv==null||vv.length!=2)
+> 			  {
+> 				  continue;
+> 			  }
+> 			  
+> 			  LOG.info("behparam added kv:"+vv[0]+"  :"+vv[1]);
+> 			  conf.set(vv[0],vv[1]);
+> 		  }
+> 	  }
+> 	  LOG.info("behparam conf is:"+conf);
+>   }
+>   
+343a366
+>     //edit by liujia;
+347c370
+< 
+---
+>     processBEHParam(conf);
+diff -x .java -rbB ./hadoop-2.3.0-cdh5.1.3-old/hadoop-mapreduce-project/hadoop-mapreduce-client/hadoop-mapreduce-client-jobclient/src/test/resources/log4j.properties ./hadoop-2.3.0-cdh5.1.3-src-complied/hadoop-mapreduce-project/hadoop-mapreduce-client/hadoop-mapreduce-client-jobclient/src/test/resources/log4j.properties
+1,19c1,75
+< #   Licensed under the Apache License, Version 2.0 (the "License");
+< #   you may not use this file except in compliance with the License.
+< #   You may obtain a copy of the License at
+< #
+< #       http://www.apache.org/licenses/LICENSE-2.0
+< #
+< #   Unless required by applicable law or agreed to in writing, software
+< #   distributed under the License is distributed on an "AS IS" BASIS,
+< #   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+< #   See the License for the specific language governing permissions and
+< #   limitations under the License.
+< 
+< # log4j configuration used during build and unit tests
+< 
+< log4j.rootLogger=info,stdout
+< log4j.threshhold=ALL
+< log4j.appender.stdout=org.apache.log4j.ConsoleAppender
+< log4j.appender.stdout.layout=org.apache.log4j.PatternLayout
+< log4j.appender.stdout.layout.ConversionPattern=%d{ISO8601} %-5p [%t] %c{2} (%F:%M(%L)) - %m%n
+---
+> # Define some default values that can be overridden by system properties
+> hbase.root.logger=INFO,console
+> hbase.security.logger=INFO,console
+> hbase.log.dir=.
+> hbase.log.file=hbase.log
+> 
+> # Define the root logger to the system property "hbase.root.logger".
+> log4j.rootLogger=${hbase.root.logger}
+> 
+> # Logging Threshold
+> log4j.threshold=ALL
+> 
+> #
+> # Daily Rolling File Appender
+> #
+> log4j.appender.DRFA=org.apache.log4j.DailyRollingFileAppender
+> log4j.appender.DRFA.File=${hbase.log.dir}/${hbase.log.file}
+> 
+> # Rollver at midnight
+> log4j.appender.DRFA.DatePattern=.yyyy-MM-dd
+> 
+> # 30-day backup
+> #log4j.appender.DRFA.MaxBackupIndex=30
+> log4j.appender.DRFA.layout=org.apache.log4j.PatternLayout
+> 
+> # Pattern format: Date LogLevel LoggerName LogMessage
+> log4j.appender.DRFA.layout.ConversionPattern=%d{ISO8601} %p %c: %m%n
+> 
+> # Debugging Pattern format
+> #log4j.appender.DRFA.layout.ConversionPattern=%d{ISO8601} %-5p %c{2} (%F:%M(%L)) - %m%n
+> 
+> #
+> # Security audit appender
+> #
+> hbase.security.log.file=SecurityAuth.audit
+> log4j.appender.DRFAS=org.apache.log4j.DailyRollingFileAppender 
+> log4j.appender.DRFAS.File=${hbase.log.dir}/${hbase.security.log.file}
+> log4j.appender.DRFAS.layout=org.apache.log4j.PatternLayout
+> log4j.appender.DRFAS.layout.ConversionPattern=%d{ISO8601} %p %c: %m%n
+> log4j.category.SecurityLogger=${hbase.security.logger}
+> log4j.additivity.SecurityLogger=false
+> #log4j.logger.SecurityLogger.org.apache.hadoop.hbase.security.access.AccessController=TRACE
+> 
+> #
+> # Null Appender
+> #
+> log4j.appender.NullAppender=org.apache.log4j.varia.NullAppender
+> 
+> #
+> # console
+> # Add "console" to rootlogger above if you want to use this 
+> #
+> log4j.appender.console=org.apache.log4j.ConsoleAppender
+> log4j.appender.console.target=System.err
+> log4j.appender.console.layout=org.apache.log4j.PatternLayout
+> log4j.appender.console.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss} %p %c{2}: %m%n
+> 
+> # Custom Logging levels
+> 
+> log4j.logger.org.apache.zookeeper=INFO
+> #log4j.logger.org.apache.hadoop.fs.FSNamesystem=DEBUG
+> log4j.logger.org.apache.hadoop.hbase=DEBUG
+> # Make these two classes INFO-level. Make them DEBUG to see more zk debug.
+> log4j.logger.org.apache.hadoop.hbase.zookeeper.ZKUtil=INFO
+> log4j.logger.org.apache.hadoop.hbase.zookeeper.ZooKeeperWatcher=INFO
+> #log4j.logger.org.apache.hadoop.dfs=DEBUG
+> # Set this class to log INFO only otherwise its OTT
+> 
+> # Uncomment this line to enable tracing on _every_ RPC call (this can be a lot of output)
+> #log4j.logger.org.apache.hadoop.ipc.HBaseServer.trace=DEBUG
+> 
+> # Uncomment the below if you want to remove logging of client region caching'
+> # and scan of .META. messages
+> # log4j.logger.org.apache.hadoop.hbase.client.HConnectionManager$HConnectionImplementation=INFO
+> # log4j.logger.org.apache.hadoop.hbase.client.MetaScanner=INFO
+diff -x .java -rbB ./hadoop-2.3.0-cdh5.1.3-old/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-api/src/main/java/org/apache/hadoop/yarn/server/api/protocolrecords/RefreshQueuesRequest.java ./hadoop-2.3.0-cdh5.1.3-src-complied/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-api/src/main/java/org/apache/hadoop/yarn/server/api/protocolrecords/RefreshQueuesRequest.java
+35a36,37
+>   public abstract String getNewQueue();
+>   public abstract void setNewQueue(String queue);
+diff -x .java -rbB ./hadoop-2.3.0-cdh5.1.3-old/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-api/src/main/proto/server/yarn_server_resourcemanager_service_protos.proto ./hadoop-2.3.0-cdh5.1.3-src-complied/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-api/src/main/proto/server/yarn_server_resourcemanager_service_protos.proto
+33a34
+> 	required string newQueue = 1 [default = ""];
+diff -x .java -rbB ./hadoop-2.3.0-cdh5.1.3-old/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-client/src/test/java/org/apache/hadoop/yarn/client/TestResourceManagerAdministrationProtocolPBClientImpl.java ./hadoop-2.3.0-cdh5.1.3-src-complied/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-client/src/test/java/org/apache/hadoop/yarn/client/TestResourceManagerAdministrationProtocolPBClientImpl.java
+46a47,48
+> import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ResourceScheduler;
+> import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacityScheduler;
+73a76,77
+>     configuration.setClass(YarnConfiguration.RM_SCHEDULER, 
+>             CapacityScheduler.class, ResourceScheduler.class);
+110a115,126
+>     request.setNewQueue("yarn.scheduler.capacity.root.default.capacity:100\r\n"
+>     		+"yarn.scheduler.capacity.root.default.maximum-capacity:100\r\n"
+>     		+ "yarn.scheduler.capacity.root.queues:default\r\n"
+>     		+ "yarn.scheduler.capacity.root.default.queues:jia,liu\r\n"
+>     		+ "yarn.scheduler.capacity.root.default.jia.capacity:10\r\n"
+>     		+ "yarn.scheduler.capacity.root.default.jia.maximum-capacity:10\r\n"
+>     		+ "yarn.scheduler.capacity.root.default.liu.capacity:90\r\n"
+>     		+ "yarn.scheduler.capacity.root.default.liu.maximum-capacity:90\r\n"
+>     		+ "yarn.scheduler.capacity.root.default.liu.queues:hahaha\r\n"
+>     		+ "yarn.scheduler.capacity.root.default.liu.queues:test\t\n"
+>     		+"yarn.scheduler.capacity.root.default.liu.hahaha.cpacity:10\r\n"
+>     		+"yarn.scheduler.capacity.root.default.liu.test.capacity:10\r\n");
+diff -x .java -rbB ./hadoop-2.3.0-cdh5.1.3-old/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-common/src/main/java/org/apache/hadoop/yarn/server/api/protocolrecords/impl/pb/RefreshQueuesRequestPBImpl.java ./hadoop-2.3.0-cdh5.1.3-src-complied/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-common/src/main/java/org/apache/hadoop/yarn/server/api/protocolrecords/impl/pb/RefreshQueuesRequestPBImpl.java
+69a70,81
+> 
+> @Override
+> public String getNewQueue() {
+> 	return this.proto.getNewQueue();
+> 	
+> }
+> 
+> @Override
+> public void setNewQueue(String queue) {
+> 	this.builder.setNewQueue(queue);
+> 	
+> }
+diff -x .java -rbB ./hadoop-2.3.0-cdh5.1.3-old/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/AdminService.java ./hadoop-2.3.0-cdh5.1.3-src-complied/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/AdminService.java
+74a75
+> import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.AutoConfigurationLoader;
+343c344,349
+<       rmContext.getScheduler().reinitialize(getConfig(), this.rmContext);
+---
+>     	
+>       //rmContext.getScheduler().reinitialize(getConfig(), this.rmContext);
+>     	Configuration conf=getConfig();
+>     	conf.set(AutoConfigurationLoader.NEW_QUEUE_PARAM,request.getNewQueue());
+>     	rmContext.getScheduler().reinitialize(conf,this.rmContext);
+> 
+diff -x .java -rbB ./hadoop-2.3.0-cdh5.1.3-old/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/CapacityScheduler.java ./hadoop-2.3.0-cdh5.1.3-src-complied/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/CapacityScheduler.java
+260a261,282
+>     //Configuration configuration = new Configuration(conf);
+>     	String newQueue=conf.get(AutoConfigurationLoader.NEW_QUEUE_PARAM);
+>     	if(newQueue!=null&&newQueue.length()>10)
+>     	{
+>     		try {
+>     		AutoConfigurationLoader.loadFromConf(conf);
+> 				AutoConfigurationLoader.praseFromString(newQueue);
+> 				AutoConfigurationLoader.saveToFile(conf);
+> 				
+> 			
+> 			} catch (Exception e) {
+> 				LOG.error("",e);
+> 			}
+>     	}
+>     	else
+>     	{
+>     		try {
+> 				AutoConfigurationLoader.loadFromConf(conf);
+> 			} catch (Exception e) {
+> 				LOG.error("",e);
+> 			}
+>     	}
